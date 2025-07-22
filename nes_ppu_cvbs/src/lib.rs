@@ -9,6 +9,52 @@
 
 use std::fmt;
 
+
+/// The voltage signal lookup table, for generating composite video
+///
+/// Voltages taken
+/// from <https://forums.nesdev.org/viewtopic.php?p=159266#p159266>
+///
+/// $0x-$3x, $x0/$xD, no emphasis/emphasis
+pub static SIGNAL_TABLE: LvlCVBSTable = LvlCVBSTable {
+    s_0: LvlAmp {
+        _0: LvlEmph { n: 0.616, e: 0.500 },
+        _d: LvlEmph { n: 0.228, e: 0.192 },
+    },
+    s_1: LvlAmp {
+        _0: LvlEmph { n: 0.840, e: 0.676 },
+        _d: LvlEmph { n: 0.312, e: 0.256 },
+    },
+    s_2: LvlAmp {
+        _0: LvlEmph { n: 1.100, e: 0.896 },
+        _d: LvlEmph { n: 0.552, e: 0.448 },
+    },
+    s_3: LvlAmp {
+        _0: LvlEmph { n: 1.100, e: 0.896 },
+        _d: LvlEmph { n: 0.880, e: 0.712 },
+    },
+    // colorburst high, colorburst low
+    s_cb: LvlAmp {
+        _0: LvlEmph { n: 0.524, e: 0.524 },
+        _d: LvlEmph { n: 0.148, e: 0.148 },
+    },
+    // blank level, sync level
+    s_bl: LvlAmp {
+        _0: LvlEmph { n: 0.312, e: 0.312 },
+        _d: LvlEmph { n: 0.048, e: 0.048 },
+    },
+};
+
+/// Blank/black level of the composite signal. Used for brightness
+/// normalization functions.
+pub static CVBS_BLACK: f64 = SIGNAL_TABLE.s_1._d.n;
+
+/// White level of the composite signal. Used for brightness normalization
+/// functions.
+pub static CVBS_WHITE: f64 = SIGNAL_TABLE.s_3._0.n;
+
+
+
 /// Represents the 9-bit framebuffer pixel value used in most emulators.
 /// 
 /// Alongside the color index, the emphasis flags are included as follows:
@@ -178,50 +224,6 @@ impl LvlCVBSTable {
        }
     }
 }
-
-/// The voltage signal lookup table, for generating composite video
-///
-/// Voltages taken
-/// from <https://forums.nesdev.org/viewtopic.php?p=159266#p159266>
-///
-/// $0x-$3x, $x0/$xD, no emphasis/emphasis
-/// 5th index is purely colorburst
-pub static SIGNAL_TABLE: LvlCVBSTable = LvlCVBSTable {
-    s_0: LvlAmp {
-        _0: LvlEmph { n: 0.616, e: 0.500 },
-        _d: LvlEmph { n: 0.228, e: 0.192 },
-    },
-    s_1: LvlAmp {
-        _0: LvlEmph { n: 0.840, e: 0.676 },
-        _d: LvlEmph { n: 0.312, e: 0.256 },
-    },
-    s_2: LvlAmp {
-        _0: LvlEmph { n: 1.100, e: 0.896 },
-        _d: LvlEmph { n: 0.552, e: 0.448 },
-    },
-    s_3: LvlAmp {
-        _0: LvlEmph { n: 1.100, e: 0.896 },
-        _d: LvlEmph { n: 0.880, e: 0.712 },
-    },
-    // colorburst high, colorburst low
-    s_cb: LvlAmp {
-        _0: LvlEmph { n: 0.524, e: 0.524 },
-        _d: LvlEmph { n: 0.148, e: 0.148 },
-    },
-    // blank level, sync level
-    s_bl: LvlAmp {
-        _0: LvlEmph { n: 0.312, e: 0.312 },
-        _d: LvlEmph { n: 0.048, e: 0.048 },
-    },
-};
-
-/// Blank/black level of the composite signal. Used for brightness
-/// normalization functions.
-pub static CVBS_BLACK: f64 = SIGNAL_TABLE.s_1._d.n;
-
-/// White level of the composite signal. Used for brightness normalization
-/// functions.
-pub static CVBS_WHITE: f64 = SIGNAL_TABLE.s_3._0.n;
 
 /// Precalculates the emphasis phase for further processing.
 fn attenuate(
