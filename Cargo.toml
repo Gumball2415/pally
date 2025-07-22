@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["pally", "nes_ppu_cvbs", "cvbs_decode"]

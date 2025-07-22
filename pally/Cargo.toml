@@ -1,0 +1,10 @@
+[package]
+name = "pally"
+version = "0.1.0"
+license = "MIT-0"
+edition = "2024"
+
+[dependencies]
+nes_ppu_cvbs = { path = "../nes_ppu_cvbs" }
+cvbs_decode = { path = "../cvbs_decode" }
+# clap = "4.5.41"

@@ -1,0 +1,7 @@
+[package]
+name = "cvbs_decode"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# colorimetry = "0.0.7"
