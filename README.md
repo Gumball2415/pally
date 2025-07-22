@@ -20,6 +20,10 @@ and color work. feel free to adjust!
 
 ## Usage
 
+To execute, run `cargo run --release`.
+
+To access documentation, run `cargo doc --open`.
+
 ```sh
 TODO! CLI interface, and also GUI
 ```
