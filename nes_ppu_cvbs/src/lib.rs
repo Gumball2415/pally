@@ -3,21 +3,30 @@
 //! `nes_ppu_cvbs` handles the encoding of a given PPU pixel to its composite
 //! counterpart, given a 9-bit PPU pixel and a phase value.
 //!
-//! Version: 0.2.0
+//! For more information on the terminology used for representing the NES PPU
+//! colors, visit:
+//! <https://www.nesdev.org/wiki/PPU_palettes#Color_Value_Significance_(Hue_/_Value)>
 
 use std::fmt;
 
 /// Represents the 9-bit framebuffer pixel value used in most emulators.
+/// 
+/// Alongside the color index, the emphasis flags are included as follows:
 ///
 /// ```txt
-/// bgrvv hhhh
-/// ||||| ++++-- Hue phase
-/// |||++------- Luma
-/// +++--------- Red, green, and blue PPUMASK emphasis bits
+/// bgr vv hhhh
+/// ||| || ++++-- Hue phase column.
+/// ||| ++------- Value row.
+/// +++---------- Red, green, and blue PPUMASK emphasis bits.
 /// ```
-///
-/// Note: It is up to the emulator to swizzle between red and green emphasis
+/// 
+/// Note:
+/// 
+/// - It is up to the emulator to swizzle between red and green emphasis
 /// tint bits for PAL/Dendy PPUs.
+/// - Sometimes Hue and Value (from
+/// [HSL](https://en.wikipedia.org/wiki/HSL_and_HSV) terminology) is also
+/// referred to as Chroma and Luma.
 #[derive(Debug)]
 pub struct PpuColor (pub u16);
 
@@ -28,7 +37,7 @@ impl PpuColor {
     fn get_hue(&self) -> u8 {
         (self.0 & 0b000_00_1111) as u8
     }
-    fn get_luma(&self) -> u8 {
+    fn get_value(&self) -> u8 {
         ((self.0 & 0b000_11_0000) >> 4) as u8
     }
     fn get_emphasis(&self) -> u8 {
@@ -44,19 +53,19 @@ impl fmt::Display for PpuColor {
 
 /// Represents all the types of pixels in a given composite video signal.
 pub enum PpuPixel {
-    Color(PpuColor),
-    /// Sync voltage level
+    Active(PpuColor),
+    /// Sync voltage level.
     Sync,
-    /// Blanking voltage level
+    /// Blanking voltage level.
     Blank,
-    /// Colorburst voltage levels, with a given hue phase
+    /// Colorburst voltage levels, with a given chroma phase.
     Colorburst(u8),
 }
 
 impl fmt::Display for PpuPixel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Color(color) => color.fmt(f),
+            Self::Active(color) => color.fmt(f),
             Self::Blank => write!(f, "blank"),
             Self::Sync => write!(f, "sync"),
             Self::Colorburst(phase) => write!(f, "colorburst with phase {phase:02X}", )
@@ -64,13 +73,14 @@ impl fmt::Display for PpuPixel {
     }
 }
 
-/// Holds two versions of a given NES PPU composite level.
+/// Holds the attenuated and non-attenuated signal of a given NES PPU composite
+/// level.
 #[derive(Debug)]
-struct LvlEmph {
-    /// No attenuation from any emphasis bits.
-    n: f64,
-    /// Emphasis attenuated signal level.
-    e: f64,
+pub struct LvlEmph {
+    /// "Nominal": No attenuation from any emphasis bits.
+    pub n: f64,
+    /// "Emphasis": Attenuated signal level from any given emphasis bits.
+    pub e: f64,
 }
 
 impl LvlEmph {
@@ -85,17 +95,17 @@ impl LvlEmph {
     }
 }
 
-/// Holds two levels of a given hue waveform.
+/// Holds two levels of a given chroma signal waveform.
 #[derive(Debug)]
-struct LvlAmp {
+pub struct LvlAmp {
     /// High voltage level `$x0`.
-    _0: LvlEmph,
+    pub _0: LvlEmph,
     /// Low voltage level `$xD`.
-    _d: LvlEmph,
+    pub _d: LvlEmph,
 }
 
 impl LvlAmp {
-    /// Encodes a given PPU row color at a given single composite sample
+    /// Encodes a given PPU chroma signal at a given single composite sample
     /// point.
     /// 
     /// Valid hue range: `0x0..0xF`\
@@ -119,18 +129,18 @@ impl LvlAmp {
 /// Holds the signal lookup table for all possible types of `PpuPixel`s.
 #[derive(Debug)]
 pub struct LvlCVBSTable {
-    /// voltage levels of `$0x` colors
-    s_0: LvlAmp,
-    /// voltage levels of `$1x` colors
-    s_1: LvlAmp,
-    /// voltage levels of `$2x` colors
-    s_2: LvlAmp,
-    /// voltage levels of `$3x` colors
-    s_3: LvlAmp,
-    /// voltage levels of colorburst
-    s_cb: LvlAmp,
-    /// voltage levels of sync and blank
-    s_bl: LvlAmp,
+    /// Signal levels of all colors in the `$0x` row.
+    pub s_0: LvlAmp,
+    /// Signal levels of all colors in the `$1x` row.
+    pub s_1: LvlAmp,
+    /// Signal levels of all colors in the `$2x` row.
+    pub s_2: LvlAmp,
+    /// Signal levels of all colors in the `$3x` row.
+    pub s_3: LvlAmp,
+    /// Signal levels of the colorburst.
+    pub s_cb: LvlAmp,
+    /// Signal levels of sync and blanking.
+    pub s_bl: LvlAmp,
 }
 
 impl LvlCVBSTable {
@@ -144,15 +154,15 @@ impl LvlCVBSTable {
         sample_phase: u8,
         alternate_line: bool
     ) -> f64 {
-        let luma = color.get_luma();
+        let value = color.get_value();
         let hue = color.get_hue();
         let emphasis = color.get_emphasis();
-        let wave = match luma {
+        let wave = match value {
             0 => &self.s_0,
             1 => &self.s_1,
             2 => &self.s_2,
             3 => &self.s_3,
-            invalid => panic!("not a valid luma value: {invalid}")
+            invalid => panic!("not a valid value value: {invalid}")
         };
 
         // Colors `$xE-$xF` always remain blanking
@@ -290,7 +300,7 @@ pub fn encode_cvbs_sample(
             SIGNAL_TABLE.s_cb.encode_sample(
                 *cburst_hue, sample_phase, false, alternate_line
             ),
-        PpuPixel::Color(color) =>
+        PpuPixel::Active(color) =>
             SIGNAL_TABLE.encode_sample(color, sample_phase, alternate_line)
     }
 }
@@ -335,7 +345,7 @@ mod tests {
     /// Test encoding of a given color `$18`
     fn encode_cvbs_color() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b000_01_1000));
+        let color = PpuPixel::Active(PpuColor(0b000_01_1000));
         let sig_hi = SIGNAL_TABLE.s_1._0.n;
         let sig_lo = SIGNAL_TABLE.s_1._d.n;
 
@@ -354,7 +364,7 @@ mod tests {
     /// Test encoding of a given color `$18`, with emphasis red
     fn encode_cvbs_color_emph() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b001_01_1000));
+        let color = PpuPixel::Active(PpuColor(0b001_01_1000));
         let sig_hi = SIGNAL_TABLE.s_1._0.n;
         let sig_lo = SIGNAL_TABLE.s_1._d.n;
 
@@ -375,7 +385,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_0() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b001_00_0000));
+        let color = PpuPixel::Active(PpuColor(0b001_00_0000));
         let sig_hi = SIGNAL_TABLE.s_0._0.n;
         let sig_lo = SIGNAL_TABLE.s_0._0.e;
         let expected = vec![
@@ -390,7 +400,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_d() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b001_00_1101));
+        let color = PpuPixel::Active(PpuColor(0b001_00_1101));
         let sig_hi = SIGNAL_TABLE.s_0._d.n;
         let sig_lo = SIGNAL_TABLE.s_0._d.e;
         let expected = vec![
@@ -405,7 +415,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_f() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b001_00_1111));
+        let color = PpuPixel::Active(PpuColor(0b001_00_1111));
         let expected = vec![
             CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
             CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
@@ -420,7 +430,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_red() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b001_01_0000));
+        let color = PpuPixel::Active(PpuColor(0b001_01_0000));
         let sig_hi = SIGNAL_TABLE.s_1._0.n;
         let sig_lo = SIGNAL_TABLE.s_1._0.e;
         let expected = vec![
@@ -435,7 +445,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_green() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b010_01_0000));
+        let color = PpuPixel::Active(PpuColor(0b010_01_0000));
         let sig_hi = SIGNAL_TABLE.s_1._0.n;
         let sig_lo = SIGNAL_TABLE.s_1._0.e;
         let expected = vec![
@@ -450,7 +460,7 @@ mod tests {
     #[test]
     fn encode_cvbs_emphasis_blue() {
         let length= 24;
-        let color = PpuPixel::Color(PpuColor(0b100_01_0000));
+        let color = PpuPixel::Active(PpuColor(0b100_01_0000));
         let sig_hi = SIGNAL_TABLE.s_1._0.n;
         let sig_lo = SIGNAL_TABLE.s_1._0.e;
         let expected = vec![
@@ -467,6 +477,6 @@ mod tests {
         let pix = PpuColor(0b100_10_1000);
         assert_eq!(0b1000, pix.get_hue());
         assert_eq!(0b100, pix.get_emphasis());
-        assert_eq!(0b10, pix.get_luma());
+        assert_eq!(0b10, pix.get_value());
     }
 }
