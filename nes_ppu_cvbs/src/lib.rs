@@ -74,7 +74,7 @@ pub static CVBS_WHITE: f64 = SIGNAL_TABLE.s_3._0.n;
 /// [HSL](https://en.wikipedia.org/wiki/HSL_and_HSV) terminology) is also
 /// referred to as Chroma and Luma.
 #[derive(Debug)]
-pub struct PpuColor (pub u16);
+pub struct PpuColor (u16);
 
 impl PpuColor {
     fn get_no_emphasis(&self) -> u8 {
@@ -88,6 +88,12 @@ impl PpuColor {
     }
     fn get_emphasis(&self) -> u8 {
         ((self.0 & 0b111_00_0000) >> 6) as u8
+    }
+}
+
+impl From<u16> for PpuColor {
+    fn from(value: u16) -> Self {
+        Self(value)
     }
 }
 
@@ -114,7 +120,8 @@ impl fmt::Display for PpuPixel {
             Self::Active(color) => color.fmt(f),
             Self::Blank => write!(f, "blank"),
             Self::Sync => write!(f, "sync"),
-            Self::Colorburst(phase) => write!(f, "colorburst with phase {phase:02X}", )
+            Self::Colorburst(phase) =>
+                write!(f, "colorburst with phase {phase:02X}", )
         }
     }
 }
@@ -122,53 +129,47 @@ impl fmt::Display for PpuPixel {
 /// Holds the attenuated and non-attenuated signal of a given NES PPU composite
 /// level.
 #[derive(Debug)]
-pub struct LvlEmph {
+struct LvlEmph {
     /// "Nominal": No attenuation from any emphasis bits.
-    pub n: f64,
+    n: f64,
     /// "Emphasis": Attenuated signal level from any given emphasis bits.
-    pub e: f64,
+    e: f64,
 }
 
 impl LvlEmph {
-    fn emphasis(&self,
-        attenuate: bool
-    ) -> f64 {
-        if attenuate {
-            self.e
-        } else {
-            self.n
-        }
+    fn select_level(&self, attenuate: bool) -> f64 {
+        if attenuate { self.e } else { self.n }
     }
 }
 
 /// Holds two levels of a given chroma signal waveform.
 #[derive(Debug)]
-pub struct LvlAmp {
+struct LvlAmp {
     /// High voltage level `$x0`.
-    pub _0: LvlEmph,
+    _0: LvlEmph,
     /// Low voltage level `$xD`.
-    pub _d: LvlEmph,
+    _d: LvlEmph,
 }
 
 impl LvlAmp {
-    /// Encodes a given PPU chroma signal at a given single composite sample
+    /// Encodes a given PPU hue phase at a given single composite sample
     /// point.
     /// 
-    /// Valid hue range: `0x0..0xF`\
     /// Valid sample phase range: `0..11`
     fn encode_sample(
         &self,
-        hue: u8,
+        hue_phase: u8,
         sample_phase: u8,
-        attenuate: bool,
         alternate_line: bool
     ) -> f64 {
-        let in_phase = color_phase(hue, sample_phase, alternate_line);
-        if in_phase {
-            self._0.emphasis(attenuate)
-        } else {
-            self._d.emphasis(attenuate)
-        }
+        let in_phase = color_phase(hue_phase, sample_phase, alternate_line);
+        self
+            .select_level(in_phase)
+            .select_level(false)
+    }
+
+    fn select_level(&self, high: bool) -> &LvlEmph {
+        if high { &self._0 } else { &self._d }
     }
 }
 
@@ -176,17 +177,17 @@ impl LvlAmp {
 #[derive(Debug)]
 pub struct LvlCVBSTable {
     /// Signal levels of all colors in the `$0x` row.
-    pub s_0: LvlAmp,
+    s_0: LvlAmp,
     /// Signal levels of all colors in the `$1x` row.
-    pub s_1: LvlAmp,
+    s_1: LvlAmp,
     /// Signal levels of all colors in the `$2x` row.
-    pub s_2: LvlAmp,
+    s_2: LvlAmp,
     /// Signal levels of all colors in the `$3x` row.
-    pub s_3: LvlAmp,
+    s_3: LvlAmp,
     /// Signal levels of the colorburst.
-    pub s_cb: LvlAmp,
+    s_cb: LvlAmp,
     /// Signal levels of sync and blanking.
-    pub s_bl: LvlAmp,
+    s_bl: LvlAmp,
 }
 
 impl LvlCVBSTable {
@@ -200,28 +201,31 @@ impl LvlCVBSTable {
         sample_phase: u8,
         alternate_line: bool
     ) -> f64 {
-        let value = color.get_value();
         let hue = color.get_hue();
-        let emphasis = color.get_emphasis();
-        let wave = match value {
-            0 => &self.s_0,
-            1 => &self.s_1,
-            2 => &self.s_2,
-            3 => &self.s_3,
-            invalid => panic!("not a valid value value: {invalid}")
-        };
 
         // Colors `$xE-$xF` always remain blanking
         if hue > 0xD {
             CVBS_BLACK
         } else {
-            wave.encode_sample(
-                hue,
-                sample_phase,
-                attenuate(hue, emphasis, sample_phase, alternate_line),
-                alternate_line
-            )
+            let value = color.get_value();
+            let emphasis = color.get_emphasis();
+            let in_phase = color_phase(hue, sample_phase, alternate_line);
+            let attenuate = attenuate(hue, emphasis, sample_phase, alternate_line);
+            self
+                .select_level(value)
+                .select_level(in_phase)
+                .select_level(attenuate)
        }
+    }
+
+    fn select_level(&self, value: u8) -> &LvlAmp {
+        match value {
+            0 => &self.s_0,
+            1 => &self.s_1,
+            2 => &self.s_2,
+            3 => &self.s_3,
+            invalid => panic!("not a valid value: {invalid}")
+        }
     }
 }
 
@@ -232,10 +236,15 @@ fn attenuate(
     sample_phase: u8,
     alternate_line: bool
 ) -> bool {
-    let r = (emphasis & 0b001 != 0) && !color_phase(0xC, sample_phase, alternate_line);
-    let g = (emphasis & 0b010 != 0) && !color_phase(0x4, sample_phase, alternate_line);
-    let b = (emphasis & 0b100 != 0) && !color_phase(0x8, sample_phase, alternate_line);
-    (r || g || b) && (hue < 0xE)
+    let r = (emphasis & 0b001 != 0)
+        && !color_phase(0xC, sample_phase, alternate_line);
+    let g = (emphasis & 0b010 != 0)
+        && !color_phase(0x4, sample_phase, alternate_line);
+    let b = (emphasis & 0b100 != 0)
+        && !color_phase(0x8, sample_phase, alternate_line);
+    (r || g || b)
+    // Colors `$xE-$xF` are not affected by emphasis.
+    && (hue < 0xE)
 }
 
 /// Original algorithm by Bisqwit.
@@ -243,7 +252,8 @@ fn attenuate(
 /// Determines the waveform level by comparing the hue with the current
 /// sample phase.
 /// 
-/// If the hue value is not chromatic (within `0x0..0xC`), it returns a constant wave value.
+/// If the hue value is not chromatic (within `0x0..0xC`), it returns a constant
+/// wave value.
 /// 
 /// If true, the phase is at the high part. Else, it is within the low part.
 /// 
@@ -300,7 +310,7 @@ pub fn encode_cvbs_sample(
             SIGNAL_TABLE.s_bl._0.n,
         PpuPixel::Colorburst(cburst_hue) =>
             SIGNAL_TABLE.s_cb.encode_sample(
-                *cburst_hue, sample_phase, false, alternate_line
+                *cburst_hue, sample_phase, alternate_line
             ),
         PpuPixel::Active(color) =>
             SIGNAL_TABLE.encode_sample(color, sample_phase, alternate_line)

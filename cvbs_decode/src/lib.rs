@@ -1,5 +1,4 @@
-//! Composite video decoder
-
+//! Simple composite video decoder
 
 pub struct DecodeConfig {
     black_point: f64,
@@ -12,32 +11,49 @@ pub struct DecodeConfig {
     gamma: f64,
 }
 
-pub struct YUVColor {
-    Y: f64,
-    U: f64,
-    V: f64,
+/// Rounds up a float to `n` decimal digits of precision.
+fn round_up(f: f64, n: u32) -> f64 {
+    let decimal = 10u32.pow(n) as f64;
+    (f * decimal).round() / decimal
 }
 
-impl YUVColor {
-    /// Converts a signal YUV color to signal RGB
-    /// via SMPTE 170M
-    /// 
-    /// Valid range for `Y`, `U`, and `V`: `0.0` to `1.0`
-    fn to_rgb(&self) -> RGBColor {
-        // coefficients taken from
-        // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
-        RGBColor {
-            R: self.Y + self.V*1.139883,
-            G: self.Y - self.U*0.394642 + self.V*0.580622,
-            B: self.Y + self.U*2.032062
-        }
-    }
+/// Converts a signal RGB color to signal YUV
+/// via SMPTE 170M.
+/// 
+/// The conversion matrix is only accurate within 6 digits due to the precision
+/// of the reduction factors, but this is fine because this is finer than the
+/// final 8bpc precision of `1/255`, or `0.003922`.
+/// 
+/// Valid range for `R`, `G`, and `B`: `0.0` to `1.0`
+/// 
+/// Returns `(Y, U, V)` tuple.
+fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+    // coefficients taken from
+    // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
+    (
+          r*0.299 + g*0.587 + b*0.114,
+        (-r*0.299 - g*0.587 + b*0.886) * 0.492111,
+        ( r*0.701 - g*0.587 - b*0.114) * 0.877283,
+    )
 }
 
-pub struct RGBColor {
-    R: f64,
-    G: f64,
-    B: f64,
+/// Converts a signal YUV color to signal RGB
+/// via SMPTE 170M.
+/// 
+/// The conversion matrix is only accurate within 6 digits due to the precision
+/// of the reduction factors, but this is fine because this is finer than the
+/// final 8bpc precision of `1/255`, or `0.003922`.
+/// 
+/// Valid range for `Y`, `U`, and `V`: `0.0` to `1.0`.
+/// 
+/// Returns `(R, G, B)` tuple.
+fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
+    // coefficients taken from
+    // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
+    let r = y + v*1.139883;
+    let b = y + u*2.032062;
+    let g = (y - r*0.299 - b*0.114) / 0.587;
+    ( r, g, b )
 }
 
 /// Saturation
@@ -64,9 +80,12 @@ fn qam_phase(signal: &[f64]) -> f64 {
 /// Both input composite and colorburst reference signals must be of the same
 /// length.
 /// 
-/// Returns a single `Y`, `U`, and `V` value.
-pub fn decode_area(cvbs: &[f64], cb: &[f64], cfg: &DecodeConfig) -> YUVColor {
-
+/// Returns a `(y, u, v)` tuple.
+pub fn decode_area(
+    cvbs: &[f64],
+    cb: &[f64],
+    cfg: &DecodeConfig
+) -> (f64, f64, f64) {
     // determine colorburst phase
     let cb_phase = qam_phase(cb);
     let signal_len = cvbs.len();
@@ -93,7 +112,6 @@ pub fn decode_area(cvbs: &[f64], cb: &[f64], cfg: &DecodeConfig) -> YUVColor {
         .collect();
 
     // QAM decode!
-
     let y: f64 = cvbs
         .into_iter()
         .map(|sample| {
@@ -114,14 +132,28 @@ pub fn decode_area(cvbs: &[f64], cb: &[f64], cfg: &DecodeConfig) -> YUVColor {
             v_decode[i] * sample / (signal_len as f64)
         }).sum();
 
-    YUVColor{
-        Y: y,
-        U: u,
-        V: v
-    }
+    (y, u, v)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn yuv_rgb_transform() {
+        let (r, g, b) = (1.0, 0.000001, 0.5);
+        let (y, u, v) = rgb_to_yuv(r, g, b);
+        let (r2, g2, b2) = yuv_to_rgb(y, u, v);
+
+        // The results should remain exact within 6 digits of precision.
+        
+        let r2 = round_up(r2, 6);
+        let g2 = round_up(g2, 6);
+        let b2 = round_up(b2, 6);
+        let r = round_up(r, 6);
+        let g = round_up(g, 6);
+        let b = round_up(b, 6);
+
+        assert_eq!((r, g, b), (r2, g2, b2));
+    }
 }
