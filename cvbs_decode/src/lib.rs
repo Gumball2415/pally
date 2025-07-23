@@ -1,18 +1,39 @@
 //! Simple composite video decoder
 
+/// Settings for adjusting decoding
 pub struct DecodeConfig {
-    black_point: f64,
-    white_point: f64,
-    brightness: f64,
-    contrast: f64,
-    hue: f64,
-    saturation: f64,
-    gain: f64,
-    gamma: f64,
+    /// Black point, in IRE units, default = `0.0`
+    pub black_point: f64,
+    /// White point, in IRE units, default = `100.0`
+    pub white_point: f64,
+    /// Luma brightness delta in IRE units, default = `0.0`
+    pub brightness: f64,
+    /// Luma contrast factor, default = `1.0`
+    pub contrast: f64,
+    /// Chroma hue angle delta, in degrees, default = `0.0`
+    pub hue: f64,
+    /// Chroma saturation factor, default = `1.0`
+    pub saturation: f64,
+    /// Gain adjustment to signal before decoding, in IRE units, default = `0.0`
+    pub gain: f64,
+    /// If defined, will apply a simple OETF gamma transfer function instead,
+    /// where the EOTF function is assumed to be gamma 2.2. Default = `0.0`
+    pub gamma: f64,
 }
 
+pub static DEFAULT_CFG: DecodeConfig = DecodeConfig {
+    black_point: 0.0,
+    white_point: 100.0,
+    brightness: 0.0,
+    contrast: 1.0,
+    hue: 0.0,
+    saturation: 1.0,
+    gain: 0.0,
+    gamma: 0.0,
+};
+
 /// Rounds up a float to `n` decimal digits of precision.
-fn round_up(f: f64, n: u32) -> f64 {
+pub fn round_up(f: f64, n: u32) -> f64 {
     let decimal = 10u32.pow(n) as f64;
     (f * decimal).round() / decimal
 }
@@ -27,7 +48,7 @@ fn round_up(f: f64, n: u32) -> f64 {
 /// Valid range for `R`, `G`, and `B`: `0.0` to `1.0`
 /// 
 /// Returns `(Y, U, V)` tuple.
-fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+pub fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
     (
@@ -47,7 +68,7 @@ fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
 /// Valid range for `Y`, `U`, and `V`: `0.0` to `1.0`.
 /// 
 /// Returns `(R, G, B)` tuple.
-fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
+pub fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
     let r = y + v*1.139883;
@@ -59,17 +80,19 @@ fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
 /// Saturation
 static SATURATION_CORRECTION: f64 = 2.0;
 
+use std::f64::consts;
+
 /// Given a sinusoidal signal, calculate its in-phase and quadrature phases.
 fn qam_phase(signal: &[f64]) -> f64 {
     let len: f64 = signal.len() as f64;
     let u: f64 = signal.iter().enumerate().map(|(i, sample)| {
-        sample * f64::sin(std::f64::consts::TAU * (i as f64) / 12.0)
+        sample * f64::sin(consts::TAU * (i as f64) / 12.0) / len
     }).sum();
 
     let v: f64 = signal.iter().enumerate().map(|(i, sample)| {
-        sample * f64::cos(std::f64::consts::TAU * (i as f64) / 12.0)
+        sample * f64::cos(consts::TAU * (i as f64) / 12.0) / len
     }).sum();
-    f64::atan2(v/len, u/len)
+    v.atan2(u)
 }
 
 /// Decodes a given composite signal, assuming it is encoded from a single
@@ -88,15 +111,21 @@ pub fn decode_area(
 ) -> (f64, f64, f64) {
     // determine colorburst phase
     let cb_phase = qam_phase(cb);
+
     let signal_len = cvbs.len();
+
+    // FIXME: it's a mystery why the phase is always offset like this
+    // offset by 90 degrees + 30 degrees
+    let phase_adjust = consts::FRAC_PI_2 + consts::FRAC_PI_6;
 
     // generate decoding waveforms
     let u_decode: Vec<f64> = (0..signal_len).into_iter()
         .map(|i|  {
             f64::sin(
-                std::f64::consts::TAU * (i as f64) / 12.0
+                consts::TAU * (i as f64) / 12.0
                 - cb_phase
                 + f64::to_radians(cfg.hue)
+                - phase_adjust
             ) * cfg.saturation * SATURATION_CORRECTION
         })
         .collect();
@@ -104,10 +133,13 @@ pub fn decode_area(
     let v_decode: Vec<f64> = (0..signal_len).into_iter()
         .map(|i|  {
             f64::cos(
-                std::f64::consts::TAU * (i as f64) / 12.0
+                consts::TAU * (i as f64) / 12.0
                 - cb_phase
                 + f64::to_radians(cfg.hue)
+                - phase_adjust
             ) * cfg.saturation * SATURATION_CORRECTION
+            // TODO: investigate inverted V fix
+            * -1.0
         })
         .collect();
 

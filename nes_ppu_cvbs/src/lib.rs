@@ -152,22 +152,6 @@ struct LvlAmp {
 }
 
 impl LvlAmp {
-    /// Encodes a given PPU hue phase at a given single composite sample
-    /// point.
-    /// 
-    /// Valid sample phase range: `0..11`
-    fn encode_sample(
-        &self,
-        hue_phase: u8,
-        sample_phase: u8,
-        alternate_line: bool
-    ) -> f64 {
-        let in_phase = color_phase(hue_phase, sample_phase, alternate_line);
-        self
-            .select_level(in_phase)
-            .select_level(false)
-    }
-
     fn select_level(&self, high: bool) -> &LvlEmph {
         if high { &self._0 } else { &self._d }
     }
@@ -191,33 +175,6 @@ pub struct LvlCVBSTable {
 }
 
 impl LvlCVBSTable {
-    /// Encodes a given PPU `PpuColor` at a given single composite sample
-    /// point.
-    /// 
-    /// Valid sample phase range: `0..11`
-    fn encode_sample(
-        &self,
-        color: &PpuColor,
-        sample_phase: u8,
-        alternate_line: bool
-    ) -> f64 {
-        let hue = color.get_hue();
-
-        // Colors `$xE-$xF` always remain blanking
-        if hue > 0xD {
-            CVBS_BLACK
-        } else {
-            let value = color.get_value();
-            let emphasis = color.get_emphasis();
-            let in_phase = color_phase(hue, sample_phase, alternate_line);
-            let attenuate = attenuate(hue, emphasis, sample_phase, alternate_line);
-            self
-                .select_level(value)
-                .select_level(in_phase)
-                .select_level(attenuate)
-       }
-    }
-
     fn select_level(&self, value: u8) -> &LvlAmp {
         match value {
             0 => &self.s_0,
@@ -308,12 +265,28 @@ pub fn encode_cvbs_sample(
             SIGNAL_TABLE.s_bl._d.n,
         PpuPixel::Blank =>
             SIGNAL_TABLE.s_bl._0.n,
-        PpuPixel::Colorburst(cburst_hue) =>
-            SIGNAL_TABLE.s_cb.encode_sample(
-                *cburst_hue, sample_phase, alternate_line
-            ),
-        PpuPixel::Active(color) =>
-            SIGNAL_TABLE.encode_sample(color, sample_phase, alternate_line)
+        PpuPixel::Colorburst(cburst_hue) => {
+            SIGNAL_TABLE.s_cb.select_level(
+                // subcarrier generation is 180 degrees offset
+                !color_phase(*cburst_hue, sample_phase, alternate_line)
+            ).select_level(false)
+        },
+        PpuPixel::Active(color) => {
+            let hue = color.get_hue();
+            // Colors `$xE-$xF` always remain blanking
+            if hue > 0xD {
+                CVBS_BLACK
+            } else {
+                let value = color.get_value();
+                let emphasis = color.get_emphasis();
+                let in_phase = color_phase(hue, sample_phase, alternate_line);
+                let attenuate = attenuate(hue, emphasis, sample_phase, alternate_line);
+                SIGNAL_TABLE
+                    .select_level(value)
+                    .select_level(in_phase)
+                    .select_level(attenuate)
+            }
+        }
     }
 }
 
