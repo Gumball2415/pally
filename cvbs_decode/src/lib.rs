@@ -1,5 +1,14 @@
 //! Simple composite video decoder
 
+pub enum DecoderType {
+    /// FIR non-complementary lowpass
+    FIR,
+    /// 2-line comb filtering. Also PAL delay line
+    Comb2Line,
+    /// 3-line comb filtering.
+    Comb3Line,
+}
+
 /// Settings for adjusting decoding
 pub struct DecodeConfig {
     /// Black point, in IRE units, default = `0.0`
@@ -16,21 +25,35 @@ pub struct DecodeConfig {
     pub saturation: f64,
     /// Gain adjustment to signal before decoding, in IRE units, default = `0.0`
     pub gain: f64,
-    /// If defined, will apply a simple OETF gamma transfer function instead,
+    /// If nonzero, will apply a simple OETF gamma transfer function instead,
     /// where the EOTF function is assumed to be gamma 2.2. Default = `0.0`
     pub gamma: f64,
+    /// Chooses what decoding to use. Not used in area-mode decoding.
+    /// Default = `DecoderType::FIR`
+    pub decode_type: DecoderType,
 }
 
-pub static DEFAULT_CFG: DecodeConfig = DecodeConfig {
-    black_point: 0.0,
-    white_point: 100.0,
-    brightness: 0.0,
-    contrast: 1.0,
-    hue: 0.0,
-    saturation: 1.0,
-    gain: 0.0,
-    gamma: 0.0,
-};
+impl Default for DecodeConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DecodeConfig {
+    pub fn new() -> Self {
+        Self {
+            black_point: 0.0,
+            white_point: 100.0,
+            brightness: 0.0,
+            contrast: 1.0,
+            hue: 0.0,
+            saturation: 1.0,
+            gain: 0.0,
+            gamma: 0.0,
+            decode_type: DecoderType::FIR,
+        }
+    }
+}
 
 /// Rounds up a float to `n` decimal digits of precision.
 pub fn round_up(f: f64, n: u32) -> f64 {
@@ -119,7 +142,7 @@ pub fn decode_area(
     let phase_adjust = consts::FRAC_PI_2 + consts::FRAC_PI_6;
 
     // generate decoding waveforms
-    let u_decode: Vec<f64> = (0..signal_len).into_iter()
+    let u_decode: Vec<f64> = (0..signal_len)
         .map(|i|  {
             f64::sin(
                 consts::TAU * (i as f64) / 12.0
@@ -130,35 +153,36 @@ pub fn decode_area(
         })
         .collect();
 
-    let v_decode: Vec<f64> = (0..signal_len).into_iter()
+    let v_decode: Vec<f64> = (0..signal_len)
         .map(|i|  {
-            f64::cos(
-                consts::TAU * (i as f64) / 12.0
-                - cb_phase
-                + f64::to_radians(cfg.hue)
-                - phase_adjust
-            ) * cfg.saturation * SATURATION_CORRECTION
             // TODO: investigate inverted V fix
-            * -1.0
+            -(
+                f64::cos(
+                    consts::TAU * (i as f64) / 12.0
+                    - cb_phase
+                    + f64::to_radians(cfg.hue)
+                    - phase_adjust
+                ) * cfg.saturation * SATURATION_CORRECTION
+            )
         })
         .collect();
 
     // QAM decode!
     let y: f64 = cvbs
-        .into_iter()
+        .iter()
         .map(|sample| {
             sample / (signal_len as f64)
         }).sum();
 
     let u: f64 = cvbs
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, sample)| {
             u_decode[i] * sample / (signal_len as f64)
         }).sum();
 
     let v: f64 = cvbs
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(i, sample)| {
             v_decode[i] * sample / (signal_len as f64)

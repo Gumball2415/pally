@@ -10,51 +10,6 @@
 use std::fmt;
 
 
-/// The voltage signal lookup table, for generating composite video
-///
-/// Voltages taken
-/// from <https://forums.nesdev.org/viewtopic.php?p=159266#p159266>
-///
-/// $0x-$3x, $x0/$xD, no emphasis/emphasis
-pub static SIGNAL_TABLE: LvlCVBSTable = LvlCVBSTable {
-    s_0: LvlAmp {
-        _0: LvlEmph { n: 0.616, e: 0.500 },
-        _d: LvlEmph { n: 0.228, e: 0.192 },
-    },
-    s_1: LvlAmp {
-        _0: LvlEmph { n: 0.840, e: 0.676 },
-        _d: LvlEmph { n: 0.312, e: 0.256 },
-    },
-    s_2: LvlAmp {
-        _0: LvlEmph { n: 1.100, e: 0.896 },
-        _d: LvlEmph { n: 0.552, e: 0.448 },
-    },
-    s_3: LvlAmp {
-        _0: LvlEmph { n: 1.100, e: 0.896 },
-        _d: LvlEmph { n: 0.880, e: 0.712 },
-    },
-    // colorburst high, colorburst low
-    s_cb: LvlAmp {
-        _0: LvlEmph { n: 0.524, e: 0.524 },
-        _d: LvlEmph { n: 0.148, e: 0.148 },
-    },
-    // blank level, sync level
-    s_bl: LvlAmp {
-        _0: LvlEmph { n: 0.312, e: 0.312 },
-        _d: LvlEmph { n: 0.048, e: 0.048 },
-    },
-};
-
-/// Blank/black level of the composite signal. Used for brightness
-/// normalization functions.
-pub static CVBS_BLACK: f64 = SIGNAL_TABLE.s_1._d.n;
-
-/// White level of the composite signal. Used for brightness normalization
-/// functions.
-pub static CVBS_WHITE: f64 = SIGNAL_TABLE.s_3._0.n;
-
-
-
 /// Represents the 9-bit framebuffer pixel value used in most emulators.
 /// 
 /// Alongside the color index, the emphasis flags are included as follows:
@@ -69,10 +24,10 @@ pub static CVBS_WHITE: f64 = SIGNAL_TABLE.s_3._0.n;
 /// Note:
 /// 
 /// - It is up to the emulator to swizzle between red and green emphasis
-/// tint bits for PAL/Dendy PPUs.
+///   tint bits for PAL/Dendy PPUs.
 /// - Sometimes Hue and Value (from
-/// [HSL](https://en.wikipedia.org/wiki/HSL_and_HSV) terminology) is also
-/// referred to as Chroma and Luma.
+///   [HSL](https://en.wikipedia.org/wiki/HSL_and_HSV) terminology) is also
+///   referred to as Chroma and Luma.
 #[derive(Debug)]
 pub struct PpuColor (u16);
 
@@ -140,6 +95,13 @@ impl LvlEmph {
     fn select_level(&self, attenuate: bool) -> f64 {
         if attenuate { self.e } else { self.n }
     }
+
+    fn normalize(self, white_point: f64, black_point: f64) -> Self {
+        LvlEmph {
+            n: (self.n-black_point) / (white_point-black_point),
+            e: (self.e-black_point) / (white_point-black_point),
+        }
+    }
 }
 
 /// Holds two levels of a given chroma signal waveform.
@@ -154,6 +116,13 @@ struct LvlAmp {
 impl LvlAmp {
     fn select_level(&self, high: bool) -> &LvlEmph {
         if high { &self._0 } else { &self._d }
+    }
+
+    fn normalize(self, white_point: f64, black_point: f64) -> Self {
+        LvlAmp {
+            _0: self._0.normalize(white_point, black_point),
+            _d: self._d.normalize(white_point, black_point)
+        }
     }
 }
 
@@ -174,7 +143,77 @@ pub struct LvlCVBSTable {
     s_bl: LvlAmp,
 }
 
+impl Default for LvlCVBSTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LvlCVBSTable {
+    /// Returns the default values of the voltage lookup table
+    ///
+    /// Voltages taken
+    /// from <https://forums.nesdev.org/viewtopic.php?p=159266#p159266>
+    ///
+    /// $0x-$3x, $x0/$xD, no emphasis/emphasis
+    pub fn new() -> Self {
+        Self {
+            s_0: LvlAmp {
+                _0: LvlEmph { n: 0.616, e: 0.500 },
+                _d: LvlEmph { n: 0.228, e: 0.192 },
+            },
+            s_1: LvlAmp {
+                _0: LvlEmph { n: 0.840, e: 0.676 },
+                _d: LvlEmph { n: 0.312, e: 0.256 },
+            },
+            s_2: LvlAmp {
+                _0: LvlEmph { n: 1.100, e: 0.896 },
+                _d: LvlEmph { n: 0.552, e: 0.448 },
+            },
+            s_3: LvlAmp {
+                _0: LvlEmph { n: 1.100, e: 0.896 },
+                _d: LvlEmph { n: 0.880, e: 0.712 },
+            },
+            // colorburst high, colorburst low
+            s_cb: LvlAmp {
+                _0: LvlEmph { n: 0.524, e: 0.524 },
+                _d: LvlEmph { n: 0.148, e: 0.148 },
+            },
+            // blank level, sync level
+            s_bl: LvlAmp {
+                _0: LvlEmph { n: 0.312, e: 0.312 },
+                _d: LvlEmph { n: 0.048, e: 0.048 },
+            },
+        }
+    }
+
+    /// Normalizes the signal lookup table, given a black point and a
+    /// white point.
+    /// 
+    /// This prenormalization step reduces work on decoding the signal.
+    pub fn normalize(self, white_point: f64, black_point: f64) -> Self {
+        LvlCVBSTable {
+            s_0: self.s_0.normalize(white_point, black_point),
+            s_1: self.s_1.normalize(white_point, black_point),
+            s_2: self.s_2.normalize(white_point, black_point),
+            s_3: self.s_3.normalize(white_point, black_point),
+            s_cb: self.s_cb.normalize(white_point, black_point),
+            s_bl: self.s_bl.normalize(white_point, black_point)
+        }
+    }
+
+    /// Blank/black level of the composite signal. Used for brightness
+    /// normalization functions.
+    pub fn get_black(&self) -> f64 {
+        self.s_1._d.n
+    }
+
+    /// White level of the composite signal. Used for brightness normalization
+    /// functions.
+    pub fn get_white(&self) -> f64 {
+        self.s_3._0.n
+    }
+
     fn select_level(&self, value: u8) -> &LvlAmp {
         match value {
             0 => &self.s_0,
@@ -183,6 +222,115 @@ impl LvlCVBSTable {
             3 => &self.s_3,
             invalid => panic!("not a valid value: {invalid}")
         }
+    }
+}
+
+pub enum PpuType {
+    _2C02,
+    _2C07,
+}
+
+/// Settings for adjusting the encoding of signals
+pub struct EncodeConfig {
+    /// PPU chip used for generating colors. Default = `PpuType::_2C02`
+    pub ppu: PpuType,
+}
+
+impl Default for EncodeConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EncodeConfig {
+    pub fn new() -> Self {
+        Self {
+            ppu: PpuType::_2C02,
+        }
+    }
+}
+
+/// Holds the signal lookup table and the encoder configurations, as well as the
+/// methods for encoding a PPU pixel to a composite signal.
+pub struct NesPpuCvbs {
+    pub lut: LvlCVBSTable,
+    pub cfg: EncodeConfig,
+}
+
+impl Default for NesPpuCvbs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NesPpuCvbs {
+    pub fn new() -> Self {
+        Self {
+            lut: LvlCVBSTable::new(),
+            cfg: EncodeConfig::new(),
+        }
+    }
+
+    /// Encodes a given `PpuPixel` into the current composite video sample.
+    /// 
+    /// Must also include the current sample phase and the colorburst hue.
+    /// 
+    /// This calls into the respective associated functions to return a sample
+    /// value.
+    pub fn encode_cvbs_sample(
+        &self,
+        pixel: &PpuPixel,
+        sample_phase: u8,
+        alternate_line: bool
+    ) -> f64 {
+        match pixel {
+            PpuPixel::Sync =>
+                self.lut.s_bl._d.n,
+            PpuPixel::Blank =>
+                self.lut.s_bl._0.n,
+            PpuPixel::Colorburst(cburst_hue) => {
+                self.lut.s_cb.select_level(
+                    // subcarrier generation is 180 degrees offset
+                    !color_phase(*cburst_hue, sample_phase, alternate_line)
+                ).select_level(false)
+            },
+            PpuPixel::Active(color) => {
+                let hue = color.get_hue();
+                // Colors `$xE-$xF` always remain blanking
+                if hue > 0xD {
+                    self.lut.get_black()
+                } else {
+                    let value = color.get_value();
+                    let emphasis = color.get_emphasis();
+                    let in_phase = color_phase(hue, sample_phase, alternate_line);
+                    let attenuate = attenuate(hue, emphasis, sample_phase, alternate_line);
+                    self.lut
+                        .select_level(value)
+                        .select_level(in_phase)
+                        .select_level(attenuate)
+                }
+            }
+        }
+    }
+
+    /// Encodes a given PPU pixel with a given signal length.
+    /// 
+    /// Returns a vector of samples. `sample_phase` will be updated to
+    /// reflect the new phase after the pixel.
+    pub fn encode_cvbs_pixel(
+        &self,
+        pixel: &PpuPixel,
+        sample_phase: &mut u8,
+        length: u8,
+        alternate_line: bool
+    ) -> Vec<f64> {
+        let mut output: Vec<f64> = Vec::new();
+        for phase in 0..length {
+            output.push(
+                self.encode_cvbs_sample(pixel, (*sample_phase + phase)%12, alternate_line));
+        }
+        *sample_phase = (*sample_phase + length) % 12;
+        output
     }
 }
 
@@ -220,13 +368,12 @@ fn color_phase(
     hue: u8,
     sample_phase: u8,
     alternate_line: bool) -> bool {
-    let in_phase = match pal_phase(hue, alternate_line) {
+    match pal_phase(hue, alternate_line) {
         0x0 => true,
         0x1..=0xC => (hue + sample_phase) % 12 >= 6,
         0xD..=0xF => false,
         invalid => panic!("not a valid hue value: {invalid}")
-    };
-    in_phase
+    }
 }
 
 /// Alternates the V phase of a given hue in the same manner as 2C07s.
@@ -242,70 +389,11 @@ fn pal_phase(hue: u8, alternate_line: bool) -> u8 {
         8, 7, 6, 5,
     ];
 
-    if (hue >= 1 && hue <= 12) && alternate_line {
+    if (1..=12).contains(&hue) && alternate_line {
         ALT_PHASE[(hue-1) as usize]
     } else {
         hue
     }
-}
-
-/// Encodes a given `PpuPixel` into the current composite video sample.
-/// 
-/// Must also include the current sample phase and the colorburst hue.
-/// 
-/// This calls into the respective associated functions to return a sample
-/// value.
-pub fn encode_cvbs_sample(
-    pixel: &PpuPixel,
-    sample_phase: u8,
-    alternate_line: bool
-) -> f64 {
-    match pixel {
-        PpuPixel::Sync =>
-            SIGNAL_TABLE.s_bl._d.n,
-        PpuPixel::Blank =>
-            SIGNAL_TABLE.s_bl._0.n,
-        PpuPixel::Colorburst(cburst_hue) => {
-            SIGNAL_TABLE.s_cb.select_level(
-                // subcarrier generation is 180 degrees offset
-                !color_phase(*cburst_hue, sample_phase, alternate_line)
-            ).select_level(false)
-        },
-        PpuPixel::Active(color) => {
-            let hue = color.get_hue();
-            // Colors `$xE-$xF` always remain blanking
-            if hue > 0xD {
-                CVBS_BLACK
-            } else {
-                let value = color.get_value();
-                let emphasis = color.get_emphasis();
-                let in_phase = color_phase(hue, sample_phase, alternate_line);
-                let attenuate = attenuate(hue, emphasis, sample_phase, alternate_line);
-                SIGNAL_TABLE
-                    .select_level(value)
-                    .select_level(in_phase)
-                    .select_level(attenuate)
-            }
-        }
-    }
-}
-
-/// Encodes a given PPU pixel with a given signal length.
-/// 
-/// Returns a vector of samples. `sample_phase` will be updated to
-/// reflect the new phase after the pixel.
-pub fn encode_cvbs_pixel(
-    pixel: &PpuPixel,
-    sample_phase: &mut u8,
-    length: u8,
-    alternate_line: bool
-) -> Vec<f64> {
-    let mut output: Vec<f64> = Vec::new();
-    for phase in 0..length {
-        output.push(encode_cvbs_sample(pixel, (*sample_phase + phase)%12, alternate_line));
-    }
-    *sample_phase = (*sample_phase + length) % 12;
-    output
 }
 
 #[cfg(test)]
@@ -315,12 +403,13 @@ mod tests {
     /// Given an expected waveform `Vec<f64>`, a `PpuPixel` to be encoded, and a
     /// length, test if the encoding works as expected.
     fn encode_cvbs(
+        encoder: &NesPpuCvbs,
         expected: &Vec<f64>,
         color: PpuPixel,
         length: u8
     ) {
         let mut sample_phase: u8 = 0;
-        let out = encode_cvbs_pixel(&color, &mut sample_phase, length, false);
+        let out = encoder.encode_cvbs_pixel(&color, &mut sample_phase, length, false);
 
         assert_eq!(*expected, out);
         assert_eq!((length % 12), sample_phase);
@@ -329,10 +418,11 @@ mod tests {
     #[test]
     /// Test encoding of a given color `$18`
     fn encode_cvbs_color() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b000_01_1000));
-        let sig_hi = SIGNAL_TABLE.s_1._0.n;
-        let sig_lo = SIGNAL_TABLE.s_1._d.n;
+        let sig_hi = encoder.lut.s_1._0.n;
+        let sig_lo = encoder.lut.s_1._d.n;
 
         // color $01
         let expected = vec![
@@ -342,19 +432,20 @@ mod tests {
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
         ];
 
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     /// Test encoding of a given color `$18`, with emphasis red
     fn encode_cvbs_color_emph() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_01_1000));
-        let sig_hi = SIGNAL_TABLE.s_1._0.n;
-        let sig_lo = SIGNAL_TABLE.s_1._d.n;
+        let sig_hi = encoder.lut.s_1._0.n;
+        let sig_lo = encoder.lut.s_1._d.n;
 
-        let sig_he = SIGNAL_TABLE.s_1._0.e;
-        let sig_le = SIGNAL_TABLE.s_1._d.e;
+        let sig_he = encoder.lut.s_1._0.e;
+        let sig_le = encoder.lut.s_1._d.e;
 
         // color $38, red emphasis
         let expected = vec![
@@ -364,97 +455,104 @@ mod tests {
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
         ];
 
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_0() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_00_0000));
-        let sig_hi = SIGNAL_TABLE.s_0._0.n;
-        let sig_lo = SIGNAL_TABLE.s_0._0.e;
+        let sig_hi = encoder.lut.s_0._0.n;
+        let sig_lo = encoder.lut.s_0._0.e;
         let expected = vec![
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_d() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_00_1101));
-        let sig_hi = SIGNAL_TABLE.s_0._d.n;
-        let sig_lo = SIGNAL_TABLE.s_0._d.e;
+        let sig_hi = encoder.lut.s_0._d.n;
+        let sig_lo = encoder.lut.s_0._d.e;
         let expected = vec![
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_f() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
+        let black = encoder.lut.get_black();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_00_1111));
         let expected = vec![
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
-            CVBS_BLACK, CVBS_BLACK, CVBS_BLACK, CVBS_BLACK,
+            black, black, black, black,
+            black, black, black, black,
+            black, black, black, black,
+            black, black, black, black,
+            black, black, black, black,
+            black, black, black, black,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_red() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_01_0000));
-        let sig_hi = SIGNAL_TABLE.s_1._0.n;
-        let sig_lo = SIGNAL_TABLE.s_1._0.e;
+        let sig_hi = encoder.lut.s_1._0.n;
+        let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_green() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b010_01_0000));
-        let sig_hi = SIGNAL_TABLE.s_1._0.n;
-        let sig_lo = SIGNAL_TABLE.s_1._0.e;
+        let sig_hi = encoder.lut.s_1._0.n;
+        let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
             sig_lo, sig_lo, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_lo, sig_lo, sig_lo, sig_lo,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
     fn encode_cvbs_emphasis_blue() {
+        let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b100_01_0000));
-        let sig_hi = SIGNAL_TABLE.s_1._0.n;
-        let sig_lo = SIGNAL_TABLE.s_1._0.e;
+        let sig_hi = encoder.lut.s_1._0.n;
+        let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
             sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
         ];
-        encode_cvbs(&expected, color, length);
+        encode_cvbs(&encoder, &expected, color, length);
     }
 
     #[test]
