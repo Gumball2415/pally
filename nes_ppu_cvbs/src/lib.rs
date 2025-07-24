@@ -187,6 +187,20 @@ impl LvlCVBSTable {
         }
     }
 
+    /// Returns a pre-normalized lookup table, with the black point set at level
+    /// `$1D`, and the white point set at level `$30`.
+    ///
+    /// Voltages taken
+    /// from <https://forums.nesdev.org/viewtopic.php?p=159266#p159266>
+    ///
+    /// $0x-$3x, $x0/$xD, no emphasis/emphasis
+    pub fn new_normalized() -> Self {
+        let new = Self::new();
+        let black_point = new.get_black();
+        let white_point = new.get_white();
+        new.normalize(white_point, black_point)
+    }
+
     /// Normalizes the signal lookup table, given a black point and a
     /// white point.
     /// 
@@ -342,11 +356,11 @@ fn attenuate(
     alternate_line: bool
 ) -> bool {
     let r = (emphasis & 0b001 != 0)
-        && !color_phase(0xC, sample_phase, alternate_line);
+        && color_phase(0xC, sample_phase, alternate_line);
     let g = (emphasis & 0b010 != 0)
-        && !color_phase(0x4, sample_phase, alternate_line);
+        && color_phase(0x4, sample_phase, alternate_line);
     let b = (emphasis & 0b100 != 0)
-        && !color_phase(0x8, sample_phase, alternate_line);
+        && color_phase(0x8, sample_phase, alternate_line);
     (r || g || b)
     // Colors `$xE-$xF` are not affected by emphasis.
     && (hue < 0xE)
@@ -437,7 +451,7 @@ mod tests {
 
     #[test]
     /// Test encoding of a given color `$18`, with emphasis red
-    fn encode_cvbs_color_emph() {
+    fn encode_cvbs_emphasis_color() {
         let encoder: NesPpuCvbs = NesPpuCvbs::new();
         let length= 24;
         let color = PpuPixel::Active(PpuColor(0b001_01_1000));
@@ -449,10 +463,10 @@ mod tests {
 
         // color $38, red emphasis
         let expected = vec![
-            sig_he, sig_he, sig_he, sig_he, sig_le, sig_le,
-            sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
-            sig_he, sig_he, sig_he, sig_he, sig_le, sig_le,
-            sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
+            sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
+            sig_le, sig_le, sig_le, sig_le, sig_he, sig_he,
+            sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
+            sig_le, sig_le, sig_le, sig_le, sig_he, sig_he,
         ];
 
         encode_cvbs(&encoder, &expected, color, length);
@@ -466,10 +480,10 @@ mod tests {
         let sig_hi = encoder.lut.s_0._0.n;
         let sig_lo = encoder.lut.s_0._0.e;
         let expected = vec![
-            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
+            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
         ];
         encode_cvbs(&encoder, &expected, color, length);
     }
@@ -482,10 +496,10 @@ mod tests {
         let sig_hi = encoder.lut.s_0._d.n;
         let sig_lo = encoder.lut.s_0._d.e;
         let expected = vec![
-            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
+            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
         ];
         encode_cvbs(&encoder, &expected, color, length);
     }
@@ -515,10 +529,10 @@ mod tests {
         let sig_hi = encoder.lut.s_1._0.n;
         let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
-            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_hi, sig_hi,
+            sig_lo, sig_lo, sig_lo, sig_lo, sig_lo, sig_lo,
         ];
         encode_cvbs(&encoder, &expected, color, length);
     }
@@ -531,10 +545,10 @@ mod tests {
         let sig_hi = encoder.lut.s_1._0.n;
         let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
-            sig_lo, sig_lo, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_lo, sig_lo, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_hi, sig_hi, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_lo, sig_lo, sig_lo, sig_lo,
+            sig_lo, sig_lo, sig_hi, sig_hi, sig_hi, sig_hi,
         ];
         encode_cvbs(&encoder, &expected, color, length);
     }
@@ -547,10 +561,10 @@ mod tests {
         let sig_hi = encoder.lut.s_1._0.n;
         let sig_lo = encoder.lut.s_1._0.e;
         let expected = vec![
-            sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
             sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
             sig_lo, sig_lo, sig_lo, sig_lo, sig_hi, sig_hi,
+            sig_hi, sig_hi, sig_hi, sig_hi, sig_lo, sig_lo,
         ];
         encode_cvbs(&encoder, &expected, color, length);
     }

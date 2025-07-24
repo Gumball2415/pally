@@ -82,13 +82,13 @@ mod tests {
 
     #[test]
     fn decode_cvbs() {
-        let mut encoder = NesPpuCvbs::new();
+        let encoder= NesPpuCvbs {
+            lut: LvlCVBSTable::new_normalized(),
+            cfg: EncodeConfig::new()
+        };
+
         let decoder = DecodeConfig::new();
         let length = 12;
-
-        let black_point = encoder.lut.get_black();
-        let white_point = encoder.lut.get_white();
-        encoder.lut = encoder.lut.normalize(white_point, black_point);
 
         // colorburst
         let cb = encoder.encode_cvbs_pixel(
@@ -98,8 +98,8 @@ mod tests {
             false
         );
 
-        for hue in 0x20..=0x2F {
-            print!("${hue:02X}: ");
+        for hue in 0..=0b111_11_1111 {
+            print!("{} ", PpuColor::from(hue));
             pixel_to_rgb(
                 &pix_to_cvbs(&encoder, hue, length),
                 &cb,
