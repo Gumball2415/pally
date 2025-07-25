@@ -213,7 +213,7 @@ impl LvlCVBSTable {
     /// Normalizes the signal lookup table, given a black point and a
     /// white point.
     /// 
-    /// This prenormalization step reduces work on decoding the signal.
+    /// This skips the signal normalization when performance is critical.
     pub fn normalize(self, white_point: f64, black_point: f64) -> Self {
         LvlCVBSTable {
             s_0: self.s_0.normalize(white_point, black_point),

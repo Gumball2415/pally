@@ -70,7 +70,7 @@ pub fn round_up(f: f64, n: u32) -> f64 {
 /// Valid range for `r`, `g`, and `b`: `0.0` to `1.0`
 /// 
 /// Returns a `(y, u, v)` `u8` tuple.
-pub fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+pub fn rgb_to_yuv((r, g, b): (f64, f64, f64)) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
     (
@@ -89,7 +89,7 @@ pub fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
 /// Valid range for `y`, `u`, and `v`: `0.0` to `1.0`.
 /// 
 /// Returns an `(r, g, b)` `u8` tuple.
-pub fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
+pub fn yuv_to_rgb((y, u, v): (f64, f64, f64)) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
     let r = y + v*1.139883;
@@ -193,8 +193,8 @@ mod tests {
     #[test]
     fn yuv_rgb_transform() {
         let (r, g, b) = (1.0, 0.000001, 0.5);
-        let (y, u, v) = rgb_to_yuv(r, g, b);
-        let (r2, g2, b2) = yuv_to_rgb(y, u, v);
+        let (y, u, v) = rgb_to_yuv((r, g, b));
+        let (r2, g2, b2) = yuv_to_rgb((y, u, v));
 
         // The results should remain exact within 6 digits of precision.
         
