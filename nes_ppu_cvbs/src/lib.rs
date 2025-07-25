@@ -7,8 +7,9 @@
 //! colors, visit:
 //! <https://www.nesdev.org/wiki/PPU_palettes#Color_Value_Significance_(Hue_/_Value)>
 
-use std::fmt;
+use clap::ValueEnum;
 
+use std::fmt;
 
 /// Represents the 9-bit framebuffer pixel value used in most emulators.
 /// 
@@ -248,6 +249,7 @@ impl LvlCVBSTable {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum PpuType {
     _2C02,
     _2C07,
@@ -257,6 +259,16 @@ pub enum PpuType {
 pub struct EncodeConfig {
     /// PPU chip used for generating colors. Default = `PpuType::_2C02`
     pub ppu: PpuType,
+    
+    /// Amount of voltage-dependent impedance for RC lowpass,
+    /// where RC = `amount * (level/composite_white) * 1e-8`.
+    /// 
+    /// This will also desaturate and hue shift the resulting colors
+    /// nonlinearly. a value of 4 very roughly corresponds to a -5 degree delta
+    /// per luma row.
+    /// 
+    /// Default = `0.0`
+    pub phase_distortion: f64,
 }
 
 impl Default for EncodeConfig {
@@ -269,6 +281,7 @@ impl EncodeConfig {
     pub fn new() -> Self {
         Self {
             ppu: PpuType::_2C02,
+            phase_distortion: 0.0,
         }
     }
 }

@@ -4,7 +4,10 @@
 use nes_ppu_cvbs::*;
 use cvbs_decode::*;
 
+use clap::ValueEnum;
+
 /// File output format.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum FileFormatType {
     /// .pal uint8
     PalUint8,
@@ -25,6 +28,7 @@ pub enum FileFormatType {
 }
 
 /// Method for clipping out-of-range RGB colors.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ClipType {
     /// If any of the RGB channels are greater than 1.0, subtract all channels
     /// by delta of highest value.
@@ -39,6 +43,7 @@ pub enum ClipType {
 }
 
 /// Method for scaling out-of-range RGB colors into gamut.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum NormalizeType {
     /// Scale all RGB values within 0.0 to 1.0.
     Scale,

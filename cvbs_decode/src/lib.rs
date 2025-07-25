@@ -1,5 +1,9 @@
 //! Simple composite video decoder
 
+
+use clap::ValueEnum;
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum DecoderType {
     /// FIR non-complementary lowpass
     FIR,
@@ -193,11 +197,10 @@ mod tests {
     #[test]
     fn yuv_rgb_transform() {
         let (r, g, b) = (1.0, 0.000001, 0.5);
-        let (y, u, v) = rgb_to_yuv((r, g, b));
-        let (r2, g2, b2) = yuv_to_rgb((y, u, v));
+        let (r2, g2, b2) = yuv_to_rgb(rgb_to_yuv((r, g, b)));
 
         // The results should remain exact within 6 digits of precision.
-        
+
         let r2 = round_up(r2, 6);
         let g2 = round_up(g2, 6);
         let b2 = round_up(b2, 6);

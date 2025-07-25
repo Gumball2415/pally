@@ -1,10 +1,14 @@
 [package]
 name = "pally"
 version = "0.1.0"
-license = "MIT-0"
 edition = "2024"
+description = "Yet another NES color palette generator."
+readme = "../README.md"
+repository = "https://github.com/Gumball2415/pally"
+license = "MIT"
+
 
 [dependencies]
 nes_ppu_cvbs = { path = "../nes_ppu_cvbs" }
 cvbs_decode = { path = "../cvbs_decode" }
-# clap = "4.5.41"
+clap = { workspace = true }
