@@ -91,6 +91,15 @@ struct LvlEmph {
     e: f64,
 }
 
+
+/// Normalizes a given value to a range `0.0` to `1.0`, given the min and max
+/// points.
+/// 
+/// This does not perform any clipping within the range.
+pub fn normalize(val: f64, max: f64, min: f64) -> f64 {
+    (val-min) / (max-min)
+}
+
 impl LvlEmph {
     fn select_level(&self, attenuate: bool) -> f64 {
         if attenuate { self.e } else { self.n }
@@ -98,8 +107,8 @@ impl LvlEmph {
 
     fn normalize(self, white_point: f64, black_point: f64) -> Self {
         LvlEmph {
-            n: (self.n-black_point) / (white_point-black_point),
-            e: (self.e-black_point) / (white_point-black_point),
+            n: normalize(self.n, white_point, black_point),
+            e: normalize(self.e, white_point, black_point),
         }
     }
 }

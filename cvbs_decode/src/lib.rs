@@ -33,12 +33,6 @@ pub struct DecodeConfig {
     pub decode_type: DecoderType,
 }
 
-impl Default for DecodeConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DecodeConfig {
     pub fn new() -> Self {
         Self {
@@ -55,22 +49,27 @@ impl DecodeConfig {
     }
 }
 
+impl Default for DecodeConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Rounds up a float to `n` decimal digits of precision.
 pub fn round_up(f: f64, n: u32) -> f64 {
     let decimal = 10u32.pow(n) as f64;
     (f * decimal).round() / decimal
 }
 
-/// Converts a signal RGB color to signal YUV
-/// via SMPTE 170M.
+/// Converts a signal RGB color to signal YUV via SMPTE 170M.
 /// 
 /// The conversion matrix is only accurate within 6 digits due to the precision
 /// of the reduction factors, but this is fine because this is finer than the
 /// final 8bpc precision of `1/255`, or `0.003922`.
 /// 
-/// Valid range for `R`, `G`, and `B`: `0.0` to `1.0`
+/// Valid range for `r`, `g`, and `b`: `0.0` to `1.0`
 /// 
-/// Returns `(Y, U, V)` tuple.
+/// Returns a `(y, u, v)` `u8` tuple.
 pub fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
@@ -81,16 +80,15 @@ pub fn rgb_to_yuv(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
     )
 }
 
-/// Converts a signal YUV color to signal RGB
-/// via SMPTE 170M.
+/// Converts a signal YUV color to signal RGB via SMPTE 170M.
 /// 
 /// The conversion matrix is only accurate within 6 digits due to the precision
 /// of the reduction factors, but this is fine because this is finer than the
 /// final 8bpc precision of `1/255`, or `0.003922`.
 /// 
-/// Valid range for `Y`, `U`, and `V`: `0.0` to `1.0`.
+/// Valid range for `y`, `u`, and `v`: `0.0` to `1.0`.
 /// 
-/// Returns `(R, G, B)` tuple.
+/// Returns an `(r, g, b)` `u8` tuple.
 pub fn yuv_to_rgb(y: f64, u: f64, v: f64) -> (f64, f64, f64) {
     // coefficients taken from
     // https://www.nesdev.org/wiki/NTSC_video#Converting_YUV_to_signal_RGB
@@ -126,7 +124,7 @@ fn qam_phase(signal: &[f64]) -> f64 {
 /// Both input composite and colorburst reference signals must be of the same
 /// length.
 /// 
-/// Returns a `(y, u, v)` tuple.
+/// Returns a `(y, u, v)` `u8` tuple.
 pub fn decode_area(
     cvbs: &[f64],
     cb: &[f64],
@@ -139,7 +137,7 @@ pub fn decode_area(
 
     // FIXME: it's a mystery why the phase is always offset like this
     // offset by 90 degrees + 30 degrees
-    let phase_adjust = consts::FRAC_PI_2 + consts::FRAC_PI_6;
+    let phase_adjust = - consts::FRAC_PI_2 - consts::FRAC_PI_3;
 
     // generate decoding waveforms
     let u_decode: Vec<f64> = (0..signal_len)
@@ -155,15 +153,12 @@ pub fn decode_area(
 
     let v_decode: Vec<f64> = (0..signal_len)
         .map(|i|  {
-            // TODO: investigate inverted V fix
-            -(
-                f64::cos(
-                    consts::TAU * (i as f64) / 12.0
-                    - cb_phase
-                    + f64::to_radians(cfg.hue)
-                    - phase_adjust
-                ) * cfg.saturation * SATURATION_CORRECTION
-            )
+            f64::cos(
+                consts::TAU * (i as f64) / 12.0
+                - cb_phase
+                + f64::to_radians(cfg.hue)
+                - phase_adjust
+            ) * cfg.saturation * SATURATION_CORRECTION
         })
         .collect();
 
