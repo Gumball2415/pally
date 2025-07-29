@@ -1,5 +1,6 @@
 //! Simple composite video decoder
 
+use std::fmt;
 
 use clap::ValueEnum;
 
@@ -13,25 +14,44 @@ pub enum DecoderType {
     Comb3Line,
 }
 
+impl fmt::Display for DecoderType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::Comb2Line => "2-line",
+            Self::Comb3Line => "3-line",
+            Self::FIR => "FIR"
+        })
+    }
+}
+
 /// Settings for adjusting decoding
 pub struct DecodeConfig {
-    /// Black point, in IRE units, default = `0.0`
-    pub black_point: f64,
-    /// White point, in IRE units, default = `100.0`
-    pub white_point: f64,
+    /// Black point, in IRE units, default = `None`
+    pub black_point: Option<f64>,
+
+    /// White point, in IRE units, default = `None`
+    pub white_point: Option<f64>,
+
     /// Luma brightness delta in IRE units, default = `0.0`
     pub brightness: f64,
+
     /// Luma contrast factor, default = `1.0`
     pub contrast: f64,
+
     /// Chroma hue angle delta, in degrees, default = `0.0`
     pub hue: f64,
+
     /// Chroma saturation factor, default = `1.0`
     pub saturation: f64,
+
     /// Gain adjustment to signal before decoding, in IRE units, default = `0.0`
     pub gain: f64,
-    /// If nonzero, will apply a simple OETF gamma transfer function instead,
-    /// where the EOTF function is assumed to be gamma 2.2. Default = `0.0`
-    pub gamma: f64,
+
+    /// If defined, will apply a simple OETF gamma transfer function with the
+    /// specified gamma, where the EOTF function is assumed to be gamma 2.2.
+    /// Default = `None`
+    pub gamma: Option<f64>,
+
     /// Chooses what decoding to use. Not used in area-mode decoding.
     /// Default = `DecoderType::FIR`
     pub decode_type: DecoderType,
@@ -40,14 +60,14 @@ pub struct DecodeConfig {
 impl DecodeConfig {
     pub fn new() -> Self {
         Self {
-            black_point: 0.0,
-            white_point: 100.0,
+            black_point: None,
+            white_point: None,
             brightness: 0.0,
             contrast: 1.0,
             hue: 0.0,
             saturation: 1.0,
             gain: 0.0,
-            gamma: 0.0,
+            gamma: None,
             decode_type: DecoderType::FIR,
         }
     }
@@ -129,19 +149,30 @@ fn qam_phase(signal: &[f64]) -> f64 {
 /// length.
 /// 
 /// Returns a `(y, u, v)` `u8` tuple.
+/// 
+/// # Panics
+/// 
+/// This function will panic if `cvbs` and `cb` are not of the same length.
 pub fn decode_area(
     cvbs: &[f64],
     cb: &[f64],
     cfg: &DecodeConfig
 ) -> (f64, f64, f64) {
+    assert_eq!(
+        cvbs.len(), cb.len(),
+        "cvbs ({}) and cb ({}) are not of equal size",
+        cvbs.len(), cb.len(),
+    );
+
     // determine colorburst phase
     let cb_phase = qam_phase(cb);
 
     let signal_len = cvbs.len();
 
     // FIXME: it's a mystery why the phase is always offset like this
-    // offset by 90 degrees + 30 degrees
-    let phase_adjust = - consts::FRAC_PI_2 - consts::FRAC_PI_3;
+    // offset by 90 degrees + 60 degrees
+    // or, 5π/6
+    let phase_adjust = -5.0 * consts::FRAC_PI_6;
 
     // generate decoding waveforms
     let u_decode: Vec<f64> = (0..signal_len)
@@ -149,8 +180,8 @@ pub fn decode_area(
             f64::sin(
                 consts::TAU * (i as f64) / 12.0
                 - cb_phase
-                + f64::to_radians(cfg.hue)
                 - phase_adjust
+                + f64::to_radians(cfg.hue)
             ) * cfg.saturation * SATURATION_CORRECTION
         })
         .collect();
@@ -160,8 +191,8 @@ pub fn decode_area(
             f64::cos(
                 consts::TAU * (i as f64) / 12.0
                 - cb_phase
-                + f64::to_radians(cfg.hue)
                 - phase_adjust
+                + f64::to_radians(cfg.hue)
             ) * cfg.saturation * SATURATION_CORRECTION
         })
         .collect();

@@ -11,12 +11,13 @@ use clap::ValueEnum;
 
 use std::fmt;
 
-/// Represents the 9-bit framebuffer pixel value used in most emulators.
+/// Wrapper type for a 9-bit frame buffer pixel value used in most emulators,
+/// stored as a `u16`.
 /// 
-/// Alongside the color index, the emphasis flags are included as follows:
+/// Alongside the color index, the emphasis bits are included as follows:
 ///
 /// ```txt
-/// bgr vv hhhh
+/// BGR VV HHHH
 /// ||| || ++++-- Hue phase column.
 /// ||| ++------- Value row.
 /// +++---------- Red, green, and blue PPUMASK emphasis bits.
@@ -30,7 +31,7 @@ use std::fmt;
 ///   [HSL](https://en.wikipedia.org/wiki/HSL_and_HSV) terminology) is also
 ///   referred to as Chroma and Luma.
 #[derive(Debug)]
-pub struct PpuColor (u16);
+pub struct PpuColor(u16);
 
 impl PpuColor {
     fn get_no_emphasis(&self) -> u8 {
@@ -249,10 +250,34 @@ impl LvlCVBSTable {
     }
 }
 
+/// The PPU to emulate video output of. Only currently supporting 2C02
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum PpuType {
     _2C02,
+    _2C03,
+    _2C04_0000,
+    _2C04_0001,
+    _2C04_0002,
+    _2C04_0003,
+    _2C04_0004,
+    _2C05_99,
     _2C07,
+}
+
+impl fmt::Display for PpuType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::_2C02 => "2C02",
+            Self::_2C03 => "2C03",
+            Self::_2C04_0000 => "2C04-0000",
+            Self::_2C04_0001 => "2C04-0001",
+            Self::_2C04_0002 => "2C04-0002",
+            Self::_2C04_0003 => "2C04-0003",
+            Self::_2C04_0004 => "2C04-0004",
+            Self::_2C05_99 => "2C05-99",
+            Self::_2C07 => "2C07",
+        })
+    }
 }
 
 /// Settings for adjusting the encoding of signals

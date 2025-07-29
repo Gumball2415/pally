@@ -4,6 +4,7 @@
 use nes_ppu_cvbs::*;
 use cvbs_decode::*;
 
+use std::fmt;
 use clap::ValueEnum;
 
 /// File output format.
@@ -25,6 +26,22 @@ pub enum FileFormatType {
     TxtMediaWiki,
     /// C header .h uint8_t
     HeaderUint8T,
+}
+
+/// Needed for default clap setting
+impl fmt::Display for FileFormatType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::PalUint8 => ".pal uint8",
+            Self::PalDouble => ".pal double",
+            Self::PalJasc => ".pal Jasc",
+            Self::Gpl => ".gpl",
+            Self::Png => ".png",
+            Self::TxtHtmlHex => ".txt HTML hex",
+            Self::TxtMediaWiki => ".txt MediaWiki",
+            Self::HeaderUint8T => ".h uint8_t",
+        })
+    }
 }
 
 /// Method for clipping out-of-range RGB colors.
