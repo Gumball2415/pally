@@ -85,7 +85,7 @@ struct PallyCli {
 
     /// Amount of voltage-dependent impedance for RC lowpass,
     /// where 'RC = amount * (level/composite_white) * 1e-8'.
-    #[arg(short, long, default_value_t = 0.0)]
+    #[arg(short, long, default_value_t = 4.0)]
     pub phase_distortion: f64,
 }
 

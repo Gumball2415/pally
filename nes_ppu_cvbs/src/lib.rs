@@ -403,7 +403,7 @@ impl NesPpuCvbs {
         }
     }
 
-    /// Encodes a given PPU pixel with a given signal length.
+    /// Encodes a single PPU pixel with a given signal length.
     /// 
     /// Returns a vector of samples. `sample_phase` will be updated to
     /// reflect the new phase after the pixel.
@@ -414,6 +414,7 @@ impl NesPpuCvbs {
         length: u8,
         alternate_line: bool
     ) -> Vec<f64> {
+        // TODO: how do we lowpass a cyclical signal in-place?
         let length = if self.cfg.phase_distortion != 0.0 {
             length * 12
         } else { length };
@@ -429,14 +430,16 @@ impl NesPpuCvbs {
             );
         }
         *sample_phase = (*sample_phase + length) % 12;
+
+        // Apply phase distortion
         if self.cfg.phase_distortion != 0.0 {
-            (output, _) = rc_lowpass(
+            output = rc_lowpass(
                 &output,
                 self.cfg.phase_distortion,
                 1.0/self.cfg.cvbs_xtal,
-                self.lut.get_white(),
-                output[0]
-            )
+                self.lut.get_white()
+            );
+            output = output.split_off(output.len()-12);
         }
         output
     }
@@ -526,13 +529,12 @@ fn rc_lowpass(
     signal: &[f64],
     amount: f64,
     dt: f64,
-    whitepoint: f64,
-    v_prev: f64
-) -> (Vec<f64>, f64) {
+    whitepoint: f64
+) -> Vec<f64> {
     assert_ne!(amount, 0.0);
     assert_ne!(dt, 0.0);
 
-    let mut v_prev = v_prev;
+    let mut v_prev = signal[0];
     let mut v_out: Vec<f64> = Vec::new();
 
     for sample in signal {
@@ -546,7 +548,7 @@ fn rc_lowpass(
         v_out.push(v_prev)
     }
 
-    (v_out, v_prev)
+    v_out
 }
 
 #[cfg(test)]

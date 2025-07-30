@@ -191,9 +191,7 @@ pub fn decode_area(
     let signal_len = cvbs.len();
 
     // FIXME: it's a mystery why the phase is always offset like this
-    // offset by 90 degrees + 60 degrees
-    // or, 5π/6
-    let phase_adjust = -5.0 * consts::FRAC_PI_6;
+    let phase_adjust = -consts::FRAC_PI_2;
 
     // generate decoding waveforms
     let u_decode: Vec<f64> = (0..signal_len)
@@ -355,7 +353,7 @@ fn qam_phase(signal: &[f64]) -> f64 {
     let v: f64 = signal.iter().enumerate().map(|(i, sample)| {
         sample * f64::cos(consts::TAU * (i as f64) / 12.0) / len
     }).sum();
-    v.atan2(u)
+    u.atan2(v)
 }
 
 #[cfg(test)]
