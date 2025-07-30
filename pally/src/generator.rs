@@ -44,40 +44,12 @@ impl fmt::Display for FileFormatType {
     }
 }
 
-/// Method for clipping out-of-range RGB colors.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum ClipType {
-    /// If any of the RGB channels are greater than 1.0, subtract all channels
-    /// by delta of highest value.
-    /// 
-    /// Algorithm by DragWx.
-    Darken,
-    /// If any of the RGB channels are greater than 1.0, desaturate the color
-    /// until all channels are within range.
-    /// 
-    /// Algorithm by DragWx.
-    Desaturate,
-}
-
-/// Method for scaling out-of-range RGB colors into gamut.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum NormalizeType {
-    /// Scale all RGB values within 0.0 to 1.0.
-    Scale,
-    /// Clips all negative RGB values, then scales them within 0.0 to 1.0.
-    ScaleClipNegative,
-}
-
 /// Settings for file I/O and additional color processing
 pub struct PallyGenConfig {
     /// File output format. Default = `FileFormatType::PalUint8`
     pub file_format: FileFormatType,
     /// Include emphasis entries in output. Default = `true`
     pub render_emphasis: bool,
-    /// Method for clipping out-of-range RGB colors. Default = `None`
-    pub clip: Option<ClipType>,
-    /// Method for scaling out-of-range RGB colors into gamut. Default = `None`
-    pub normalize: Option<NormalizeType>,
 }
 
 impl PallyGenConfig {
@@ -85,8 +57,6 @@ impl PallyGenConfig {
         Self {
             file_format: FileFormatType::PalUint8,
             render_emphasis: true,
-            clip: None,
-            normalize: None,
         }
     }
 }
@@ -134,19 +104,16 @@ pub fn pixel_to_cvbs(encoder: &NesPpuCvbs, pixel: u16, length: u8) -> Vec<f64> {
 pub fn cvbs_to_rgb(
     cvbs: &[f64],
     cb: &[f64],
-    config: &DecodeConfig
+    cfg: &DecodeConfig
 ) -> (f64, f64, f64) {
-    let (r, g, b) = yuv_to_rgb(
-        decode_area(cvbs, cb, config)
-    );
-
-    // TODO: colorimetry, normalization, clipping
-
-    let r = r.clamp(0.0, 1.0);
-    let g = g.clamp(0.0, 1.0);
-    let b = b.clamp(0.0, 1.0);
-
-    (r, g, b)
+    clip_normalize_colors(
+        normalize_color(
+            yuv_to_rgb(
+                decode_area(cvbs, cb, cfg)
+            ),
+            cfg.black_point, cfg.white_point
+        ), cfg
+    )
 }
 
 /// Converts a given PPU pixel into a single 8bpc RGB color.

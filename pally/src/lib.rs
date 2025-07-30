@@ -96,11 +96,10 @@ pub fn run_cli() -> Result<(), Box<dyn Error>> {
     let pally_cli = &PallyCli::parse();
 
     let pally = &parse_pally_config(pally_cli);
-    let encoder = &parse_encoder(pally_cli);
-    let decoder = &parse_decoder(pally_cli);
+    let (encoder, decoder) = &parse_encoder(pally_cli);
 
     // generate colors
-    let palette = generate_colors(pally, encoder, decoder);
+    let palette = generate_colors(pally.render_emphasis, encoder, decoder);
 
     // save colors
     save_colors(&pally_cli.file_output, &palette)
@@ -110,12 +109,12 @@ pub fn run_cli() -> Result<(), Box<dyn Error>> {
 /// 
 /// Returns a vector of `(r, g, b)` `f64` tuples.
 pub fn generate_colors(
-    pally: &PallyGenConfig,
+    render_emphasis: bool,
     encoder: &NesPpuCvbs,
     decoder: &DecodeConfig
 ) -> Vec<(f64, f64, f64)> {
 
-    let max: u16 = if pally.render_emphasis {
+    let max: u16 = if render_emphasis {
         0b111_11_1111
     } else {
         0b000_11_1111
@@ -138,55 +137,61 @@ pub fn save_colors(path: &Path, palette: &[(f64, f64, f64)]) -> Result<(), Box<d
 /// Grabs the relevant fields from the parser.
 /// 
 /// Returns a new `PallyGenConfig` encoder configuration.
-fn parse_pally_config(cli: &PallyCli) -> PallyGenConfig {
+fn parse_pally_config(pallycli: &PallyCli) -> PallyGenConfig {
     PallyGenConfig {
-        file_format: cli.file_format,
-        clip: cli.clip,
-        normalize: cli.normalize,
-        render_emphasis: cli.render_emphasis,
+        file_format: pallycli.file_format,
+        render_emphasis: pallycli.render_emphasis,
     }
 }
 
 /// Grabs the relevant fields from the parser.
 /// 
-/// Returns a new `NesPpuCvbs` encoder configuration.
-fn parse_encoder(cli: &PallyCli) -> NesPpuCvbs {
+/// Returns a new encoder and decoder configuration.
+fn parse_encoder(pallycli: &PallyCli) -> (NesPpuCvbs, DecodeConfig) {
+    let lut = LvlCVBSTable::new();
 
-    let mut lut = LvlCVBSTable::new();
+    // Get LUT's own black and white points if none is provided
+    let black_point = pallycli.black_point.unwrap_or(0.0);
+    let blank_point = lut.get_black() * 140.0;
+    let white_point = pallycli.white_point.unwrap_or(lut.get_white() * 140.0) - blank_point;
 
-    // Get
-    if (None, None) == (cli.black_point, cli.white_point) {
-        let white = lut.get_white();
-        let black = lut.get_black();
-        lut = lut.normalize(white, black);
-    }
-
-    let cfg: EncodeConfig = EncodeConfig {
-        ppu: cli.ppu,
-        phase_distortion: cli.phase_distortion,
-    };
-
-    NesPpuCvbs {
-        lut,
-        cfg,
-    }
-}
-
-fn parse_decoder(cli: &PallyCli) -> DecodeConfig {
-    DecodeConfig {
-        black_point: cli.black_point,
-        white_point: cli.white_point,
-        brightness: cli.brightness,
-        contrast: cli.contrast,
-        hue: cli.hue,
-        saturation: cli.saturation,
-        gain: cli.gain,
-        gamma: cli.gamma,
-        decode_type: cli.decode_type,
-    }
+    (
+        NesPpuCvbs {
+            lut,
+            cfg: EncodeConfig {
+                ppu: pallycli.ppu,
+                phase_distortion: pallycli.phase_distortion,
+                ..Default::default()
+            }.initialize_clock_freq(),
+        },
+        DecodeConfig {
+            black_point,
+            white_point,
+            blank_point,
+            brightness: pallycli.brightness,
+            contrast: pallycli.contrast,
+            hue: pallycli.hue,
+            saturation: pallycli.saturation,
+            gain: pallycli.gain,
+            gamma: pallycli.gamma,
+            decode_type: pallycli.decode_type,
+            clip: pallycli.clip,
+            normalize: pallycli.normalize,
+        }
+    )
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     // TODO: tests
+    #[test]
+    fn generate() {
+            let pally = &PallyGenConfig::new();
+            let encoder = &NesPpuCvbs::new().initialize_clock_freq();
+            let decoder = &DecodeConfig::new();
+
+            // generate colors
+            generate_colors(pally.render_emphasis, encoder, decoder);
+    }
 }

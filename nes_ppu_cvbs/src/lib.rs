@@ -294,6 +294,15 @@ pub struct EncodeConfig {
     /// 
     /// Default = `0.0`
     pub phase_distortion: f64,
+
+    /// System master clock frequency. Must be initialized.
+    pub main_xtal: f64,
+
+    /// Composite video sample rate frequency. Must be initialized.
+    pub cvbs_xtal: f64,
+
+    /// Colorburst frequency. Must be initialized.
+    pub cb_xtal: f64,
 }
 
 impl Default for EncodeConfig {
@@ -307,6 +316,26 @@ impl EncodeConfig {
         Self {
             ppu: PpuType::_2C02,
             phase_distortion: 0.0,
+            main_xtal: 0.0,
+            cvbs_xtal: 0.0,
+            cb_xtal: 0.0
+        }
+    }
+
+    /// Initializes frequency fields, given the PPU type.
+    pub fn initialize_clock_freq(self) -> Self {
+        let main_xtal = match self.ppu {
+            PpuType::_2C02 => 236.25e6 / 11.0,
+            PpuType::_2C07 => 26601712.5,
+            _ => 0.0,
+        };
+        let cvbs_xtal = main_xtal * 2.0;
+        let cb_xtal = main_xtal / 6.0;
+        Self {
+            main_xtal,
+            cvbs_xtal,
+            cb_xtal,
+            ..self
         }
     }
 }
@@ -385,13 +414,39 @@ impl NesPpuCvbs {
         length: u8,
         alternate_line: bool
     ) -> Vec<f64> {
-        let mut output: Vec<f64> = Vec::new();
+        let length = if self.cfg.phase_distortion != 0.0 {
+            length * 12
+        } else { length };
+
+        let mut output: Vec<f64> = Vec::with_capacity(length as usize);
         for phase in 0..length {
             output.push(
-                self.encode_cvbs_sample(pixel, (*sample_phase + phase)%12, alternate_line));
+                self.encode_cvbs_sample(
+                    pixel,
+                    (*sample_phase + phase)%12,
+                    alternate_line
+                )
+            );
         }
         *sample_phase = (*sample_phase + length) % 12;
+        if self.cfg.phase_distortion != 0.0 {
+            (output, _) = rc_lowpass(
+                &output,
+                self.cfg.phase_distortion,
+                1.0/self.cfg.cvbs_xtal,
+                self.lut.get_white(),
+                output[0]
+            )
+        }
         output
+    }
+
+    /// Initializes frequency fields, given the PPU type.
+    pub fn initialize_clock_freq(self) -> Self {
+        Self {
+            cfg: self.cfg.initialize_clock_freq(),
+            ..self
+        }
     }
 }
 
@@ -455,6 +510,43 @@ fn pal_phase(hue: u8, alternate_line: bool) -> u8 {
     } else {
         hue
     }
+}
+
+/// Phase shifts the composite using a simple RC lowpass for differential phase
+/// distortion.
+/// <https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter>
+/// 
+/// Returns the lowpassed signal, as well as `v_prev`
+/// 
+/// # Panics
+/// 
+/// If `dt` or `amount` is `0.0`, this function will panic due to a division by
+/// zero.
+fn rc_lowpass(
+    signal: &[f64],
+    amount: f64,
+    dt: f64,
+    whitepoint: f64,
+    v_prev: f64
+) -> (Vec<f64>, f64) {
+    assert_ne!(amount, 0.0);
+    assert_ne!(dt, 0.0);
+
+    let mut v_prev = v_prev;
+    let mut v_out: Vec<f64> = Vec::new();
+
+    for sample in signal {
+        // impedance changes depending on DAC tap
+        // we approximate this by using the raw signal's voltage
+        // https://forums.nesdev.org/viewtopic.php?p=287241#p287241
+        // the phase shifts negative on higher levels according to https://forums.nesdev.org/viewtopic.php?p=186297#p186297
+        let v_prev_norm = sample / whitepoint;
+        let alpha: f64 = dt / (v_prev_norm * amount * 1e-8 + dt);
+        v_prev = alpha * sample + (1.0 - alpha) * v_prev;
+        v_out.push(v_prev)
+    }
+
+    (v_out, v_prev)
 }
 
 #[cfg(test)]

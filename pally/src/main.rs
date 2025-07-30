@@ -1,7 +1,7 @@
 use std::process;
 
 fn main() {
-    // save colors
+    // TODO: GUI or WASM interface?
     if let Err(e) = pally::run_cli() {
         eprintln!("Error: {e}");
         process::exit(1);

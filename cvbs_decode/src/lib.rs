@@ -24,13 +24,40 @@ impl fmt::Display for DecoderType {
     }
 }
 
+/// Method for clipping out-of-range RGB colors.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ClipType {
+    /// If any of the RGB channels are greater than 1.0, subtract all channels
+    /// by delta of highest value.
+    /// 
+    /// Algorithm by DragWx.
+    Darken,
+    /// If any of the RGB channels are greater than 1.0, desaturate the color
+    /// until all channels are within range.
+    /// 
+    /// Algorithm by DragWx.
+    Desaturate,
+}
+
+/// Method for scaling out-of-range RGB colors into gamut.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum NormalizeType {
+    /// Scale all RGB values within 0.0 to 1.0.
+    Scale,
+    /// Clips all negative RGB values, then scales them within 0.0 to 1.0.
+    ScaleClipNegative,
+}
+
 /// Settings for adjusting decoding
 pub struct DecodeConfig {
-    /// Black point, in IRE units, default = `None`
-    pub black_point: Option<f64>,
+    /// Black point, in IRE units, default = `0.0`
+    pub black_point: f64,
 
-    /// White point, in IRE units, default = `None`
-    pub white_point: Option<f64>,
+    /// White point, in IRE units, default = `100.0`
+    pub white_point: f64,
+
+    /// Blank point, in IRE units, default = `7.5`
+    pub blank_point: f64,
 
     /// Luma brightness delta in IRE units, default = `0.0`
     pub brightness: f64,
@@ -55,13 +82,20 @@ pub struct DecodeConfig {
     /// Chooses what decoding to use. Not used in area-mode decoding.
     /// Default = `DecoderType::FIR`
     pub decode_type: DecoderType,
+
+    /// Method for clipping out-of-range RGB colors. Default = `None`
+    pub clip: Option<ClipType>,
+
+    /// Method for scaling out-of-range RGB colors into gamut. Default = `None`
+    pub normalize: Option<NormalizeType>,
 }
 
 impl DecodeConfig {
     pub fn new() -> Self {
         Self {
-            black_point: None,
-            white_point: None,
+            black_point: 0.0,
+            white_point: 100.0,
+            blank_point: 7.5,
             brightness: 0.0,
             contrast: 1.0,
             hue: 0.0,
@@ -69,6 +103,8 @@ impl DecodeConfig {
             gain: 0.0,
             gamma: None,
             decode_type: DecoderType::FIR,
+            clip: None,
+            normalize: None,
         }
     }
 }
@@ -123,22 +159,7 @@ pub fn yuv_to_rgb((y, u, v): (f64, f64, f64)) -> (f64, f64, f64) {
 }
 
 /// Saturation
-static SATURATION_CORRECTION: f64 = 2.0;
-
-use std::f64::consts;
-
-/// Given a sinusoidal signal, calculate its in-phase and quadrature phases.
-fn qam_phase(signal: &[f64]) -> f64 {
-    let len: f64 = signal.len() as f64;
-    let u: f64 = signal.iter().enumerate().map(|(i, sample)| {
-        sample * f64::sin(consts::TAU * (i as f64) / 12.0) / len
-    }).sum();
-
-    let v: f64 = signal.iter().enumerate().map(|(i, sample)| {
-        sample * f64::cos(consts::TAU * (i as f64) / 12.0) / len
-    }).sum();
-    v.atan2(u)
-}
+const SATURATION_CORRECTION: f64 = 2.0;
 
 /// Decodes a given composite signal, assuming it is encoded from a single
 /// patch of color.
@@ -148,7 +169,7 @@ fn qam_phase(signal: &[f64]) -> f64 {
 /// Both input composite and colorburst reference signals must be of the same
 /// length.
 /// 
-/// Returns a `(y, u, v)` `u8` tuple.
+/// Returns a raw `(y, u, v)` `f64` tuple, in IRE.
 /// 
 /// # Panics
 /// 
@@ -197,21 +218,36 @@ pub fn decode_area(
         })
         .collect();
 
-    // QAM decode!
-    let y: f64 = cvbs
+    // FIXME: need to do this better
+    let mut signal: Vec<f64> = cvbs.to_vec();
+
+    // convert to IRE
+    signal = signal.iter().map(|x| x * 140.0).collect();
+
+    // blank = 0.0
+    signal = signal.iter().map(|x| x - cfg.blank_point).collect();
+
+    // apply gain
+    signal = signal.iter().map(|x| x + cfg.gain).collect();
+
+    // decode!
+    let y: f64 = signal
         .iter()
         .map(|sample| {
             sample / (signal_len as f64)
         }).sum();
 
-    let u: f64 = cvbs
+    // apply brightnes and contrast
+    let y = y * cfg.contrast + cfg.brightness;
+
+    let u: f64 = signal
         .iter()
         .enumerate()
         .map(|(i, sample)| {
             u_decode[i] * sample / (signal_len as f64)
         }).sum();
 
-    let v: f64 = cvbs
+    let v: f64 = signal
         .iter()
         .enumerate()
         .map(|(i, sample)| {
@@ -219,6 +255,107 @@ pub fn decode_area(
         }).sum();
 
     (y, u, v)
+}
+
+/// Given a three-channeled signal and min/max value points, scale the values,
+/// such that `min = 0.0`, and `max == 1.0`
+pub fn normalize_color(
+    (r, g, b): (f64, f64, f64),
+    min: f64,
+    max: f64,
+) -> (f64, f64, f64) {
+    (
+        normalize_channel(r, min, max),
+        normalize_channel(g, min, max),
+        normalize_channel(b, min, max),
+    )
+}
+
+/// Scale the signal such that `min = 0.0`, and `max == 1.0`
+fn normalize_channel(
+    c: f64,
+    min: f64,
+    max: f64,
+) -> f64 {
+    (c - min) / (max - min)
+}
+
+/// Apply clipping and renormalization, if defined.
+pub fn clip_normalize_colors(
+    (r, g, b): (f64, f64, f64),
+    cfg: &DecodeConfig,
+) -> (f64, f64, f64) {
+    let (r, g, b) = if let Some(clip) = cfg.clip {
+        // clip takes priority over normalize
+        match clip {
+            ClipType::Darken => color_clip_darken((r, g, b)),
+            ClipType::Desaturate => color_clip_desaturate((r, g ,b))
+        }
+    }
+    else if let Some(norm) = cfg.normalize {
+            let (min, max) = match norm {
+                NormalizeType::ScaleClipNegative => (0.0, r.max(g.max(b))),
+                NormalizeType::Scale => (r.min(g.min(b)), r.max(g.max(b))),
+            };
+            normalize_color((r, g, b), min, max)
+    } else {
+        (r, g, b)
+    };
+    clip_color((r, g, b), 0.0, 1.0)
+}
+
+/// Helper function for `f64::clamp()` for a color tuple.
+fn clip_color(
+    (r, g, b): (f64, f64, f64),
+    min: f64,
+    max: f64,
+) -> (f64, f64, f64) {
+    (
+        r.clamp(min, max),
+        g.clamp(min, max),
+        b.clamp(min, max),
+    )
+}
+
+/// Algorithm by DragWx.
+/// 
+/// If any of the RGB channels are greater than 1, subtract all channels by
+/// delta of greatest channel
+fn color_clip_darken(
+    (r, g, b): (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let darken_factor = r.max(g.max(b));
+    normalize_color((r, g, b), 0.0, darken_factor)
+}
+
+
+/// Algorithm by DragWx.
+/// 
+/// If any of the RGB channels are greater than 1, desaturate until all channels
+/// are within range.
+fn color_clip_desaturate(
+    (r, g, b): (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let darken_factor = r.max(g.max(b));
+    let (y, _, _) = rgb_to_yuv((r, g, b));
+    let (r, g, b) = (r-y, g-y, b-y);
+    let (r, g, b) = (r/darken_factor, g/darken_factor, b/darken_factor);
+    (r+y, g+y, b+y)
+}
+
+use std::f64::consts;
+
+/// Given a sinusoidal signal, calculate its in-phase and quadrature phases.
+fn qam_phase(signal: &[f64]) -> f64 {
+    let len: f64 = signal.len() as f64;
+    let u: f64 = signal.iter().enumerate().map(|(i, sample)| {
+        sample * f64::sin(consts::TAU * (i as f64) / 12.0) / len
+    }).sum();
+
+    let v: f64 = signal.iter().enumerate().map(|(i, sample)| {
+        sample * f64::cos(consts::TAU * (i as f64) / 12.0) / len
+    }).sum();
+    v.atan2(u)
 }
 
 #[cfg(test)]
