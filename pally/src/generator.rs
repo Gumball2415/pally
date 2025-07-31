@@ -4,69 +4,6 @@
 use nes_ppu_cvbs::*;
 use cvbs_decode::*;
 
-use std::fmt;
-use clap::ValueEnum;
-
-/// File output format.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum FileFormatType {
-    /// .pal uint8
-    PalUint8,
-    /// .pal double
-    PalDouble,
-    /// .pal Jasc
-    PalJasc,
-    /// .gpl
-    Gpl,
-    /// .png
-    Png,
-    /// .txt HTML hex
-    TxtHtmlHex,
-    /// .txt MediaWiki
-    TxtMediaWiki,
-    /// C header .h uint8_t
-    HeaderUint8T,
-}
-
-/// Needed for default clap setting
-impl fmt::Display for FileFormatType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::PalUint8 => ".pal uint8",
-            Self::PalDouble => ".pal double",
-            Self::PalJasc => ".pal Jasc",
-            Self::Gpl => ".gpl",
-            Self::Png => ".png",
-            Self::TxtHtmlHex => ".txt HTML hex",
-            Self::TxtMediaWiki => ".txt MediaWiki",
-            Self::HeaderUint8T => ".h uint8_t",
-        })
-    }
-}
-
-/// Settings for file I/O and additional color processing
-pub struct PallyGenConfig {
-    /// File output format. Default = `FileFormatType::PalUint8`
-    pub file_format: FileFormatType,
-    /// Include emphasis entries in output. Default = `true`
-    pub render_emphasis: bool,
-}
-
-impl PallyGenConfig {
-    pub fn new() -> Self {
-        Self {
-            file_format: FileFormatType::PalUint8,
-            render_emphasis: true,
-        }
-    }
-}
-
-impl Default for PallyGenConfig {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Converts the floating-point palette tuple vector into u8
 /// 
 /// Converting range of `0.0, 1.0` to `0, 255`.

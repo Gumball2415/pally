@@ -34,16 +34,29 @@ use std::fmt;
 pub struct PpuColor(u16);
 
 impl PpuColor {
-    fn get_no_emphasis(&self) -> u8 {
+    /// Deconstructs current color into a tuple of `(hue, value, emphasis, color byte)`.
+    pub fn deconstruct(&self) -> (u8, u8, u8, u8) {
+        (
+            self.get_hue(),
+            self.get_value(),
+            self.get_emphasis(),
+            self.get_byte(),
+        )
+    }
+
+    pub fn get_byte(&self) -> u8 {
         (self.0 & 0b000_11_1111) as u8
     }
-    fn get_hue(&self) -> u8 {
+
+    pub fn get_hue(&self) -> u8 {
         (self.0 & 0b000_00_1111) as u8
     }
-    fn get_value(&self) -> u8 {
+
+    pub fn get_value(&self) -> u8 {
         ((self.0 & 0b000_11_0000) >> 4) as u8
     }
-    fn get_emphasis(&self) -> u8 {
+
+    pub fn get_emphasis(&self) -> u8 {
         ((self.0 & 0b111_00_0000) >> 6) as u8
     }
 }
@@ -56,7 +69,7 @@ impl From<u16> for PpuColor {
 
 impl fmt::Display for PpuColor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "${:02X} {:03b}", self.get_no_emphasis(), self.get_emphasis())
+        write!(f, "${:02X} {:03b}", self.get_byte(), self.get_emphasis())
     }
 }
 

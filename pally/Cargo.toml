@@ -1,6 +1,7 @@
 [package]
 name = "pally"
 version = "0.1.0"
+authors = ["Persune <gumball2415@gmail.com>"]
 edition = "2024"
 description = "Yet another NES color palette generator."
 readme = "../README.md"

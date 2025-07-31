@@ -1,20 +1,44 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use std::error::Error;
 
 mod generator;
 mod fileio;
 use crate::generator::*;
+use crate::fileio::*;
 use nes_ppu_cvbs::*;
 use cvbs_decode::*;
 
 use clap::Parser;
 
+/// Settings for file I/O and additional color processing
+pub struct PallyGenConfig {
+    /// File output format. Default = `FileFormatType::PalUint8`
+    pub file_format: FileFormatType,
+    /// Include emphasis entries in output. Default = `true`
+    pub render_emphasis: bool,
+}
+
+impl PallyGenConfig {
+    pub fn new() -> Self {
+        Self {
+            file_format: FileFormatType::PalUint8,
+            render_emphasis: true,
+        }
+    }
+}
+
+impl Default for PallyGenConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = env!("CARGO_PKG_DESCRIPTION"), long_about = None)]
-struct PallyCli {
+pub struct PallyCli {
     /// File output. Format set by `--file-format`.
     pub file_output: PathBuf,
 
@@ -96,13 +120,13 @@ pub fn run_cli() -> Result<(), Box<dyn Error>> {
     let pally_cli = &PallyCli::parse();
 
     let pally = &parse_pally_config(pally_cli);
-    let (encoder, decoder) = &parse_encoder(pally_cli);
+    let (encoder, decoder) = &parse_encoder_decoder(pally_cli);
 
     // generate colors
     let palette = generate_colors(pally.render_emphasis, encoder, decoder);
 
     // save colors
-    save_colors(&pally_cli.file_output, &palette)
+    save_colors(pally_cli, &palette)
 }
 
 /// Generates the palette entries.
@@ -126,9 +150,17 @@ pub fn generate_colors(
 }
 
 /// Saves the generated palette to a file, with a provided path.
-pub fn save_colors(path: &Path, palette: &[(f64, f64, f64)]) -> Result<(), Box<dyn Error>> {
+pub fn save_colors(
+    pallycli: &PallyCli,
+    palette: &[(f64, f64, f64)]
+) -> Result<(), Box<dyn Error>> {
     // TODO: switching between different outputs based on enum and trait?
-    fileio::output_binary_uint8(path, palette)?;
+    fileio::output_file(
+        &pallycli.file_output,
+        palette,
+        pallycli.file_format
+    )?;
+
     Ok(())
 }
 
@@ -147,13 +179,15 @@ fn parse_pally_config(pallycli: &PallyCli) -> PallyGenConfig {
 /// Grabs the relevant fields from the parser.
 /// 
 /// Returns a new encoder and decoder configuration.
-fn parse_encoder(pallycli: &PallyCli) -> (NesPpuCvbs, DecodeConfig) {
+fn parse_encoder_decoder(pallycli: &PallyCli) -> (NesPpuCvbs, DecodeConfig) {
     let lut = LvlCVBSTable::new();
 
     // Get LUT's own black and white points if none is provided
     let black_point = pallycli.black_point.unwrap_or(0.0);
     let blank_point = lut.get_black() * 140.0;
-    let white_point = pallycli.white_point.unwrap_or(lut.get_white() * 140.0) - blank_point;
+    let white_point = pallycli.white_point.unwrap_or(
+        (lut.get_white() * 140.0) - blank_point
+    );
 
     (
         NesPpuCvbs {
