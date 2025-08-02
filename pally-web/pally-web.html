@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="module" src="index.js"></script>
+    <title>Pally</title>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="stylesheet.css">
+
+    <style>
+        :root {
+            --palette1: var(--bggray4);
+            --palette2: var(--bggray3);
+            --palette3: var(--bggray2);
+            --palette4: var(--bggray1);
+        }
+
+        body {
+            background: var(--bggray2) fixed center;
+        	text-align: center;
+        }
+
+        fieldset {
+            border: 2px solid var(--palette1);
+            display: inline-block;
+            vertical-align: top;
+        }
+
+        fieldset legend {
+            padding: 4px 8px;
+        }
+
+        section {
+            width: 100%;
+        }
+
+        input {
+            background: #000;
+            border: 1px solid var(--palette3);
+            color: #FFF;
+        }
+
+        input:focus {
+            border-color: var(--palette1);
+        }
+
+        input:hover {
+            border-color: var(--palette1);
+        }
+
+        button,
+        input[type=button] {
+            cursor: pointer;
+            background: var(--palette2);
+            padding: 1px 8px;
+            border: 1px outset var(--palette3);
+            color: var(--palette4);
+            border-radius: 1px;
+        }
+
+        button:focus,
+        input[type=button]:focus {
+            background: var(--palette1);
+            border-color: #FFF;
+            border-style: solid;
+        }
+
+        button:not(:disabled):hover,
+        input[type=button]:not(:disabled):hover {
+            border-style: solid;
+            border-color: #FFF;
+        }
+
+        button:not(:disabled):active,
+        input[type=button]:not(:disabled):active {
+            border-style: inset;
+            background: #FFF;
+            padding-top: 2px;
+            padding-left: 9px;
+            padding-right: 7px;
+            padding-bottom: 0px;
+        }
+
+        button:disabled,
+        input[type=button]:disabled {
+            cursor: default;
+            border-style: solid;
+            border-color: #555;
+            background: #555;
+        }
+
+        input[type=number] {
+            /* There's no way to dice it, in FF, the arrows are ugly and it
+            doesn't seem like the team is going to fix them. */
+            appearance: textfield;
+            -moz-appearance: textfield;
+            font-family: 'Source Code Pro', sans-serif;
+            text-align: center;
+        }
+
+        label {
+            position: relative;
+            cursor: pointer;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            user-select: none;
+        }
+
+        input[type=checkbox],
+        input[type=radio] {
+            width: 14px;
+            height: 14px;
+            opacity: 0;
+        }
+
+        label:hover {
+            color: #FFF;
+        }
+
+        input[type=checkbox]+label:hover::before,
+        input[type=radio]+label:hover::before {
+            border-color: #FFF;
+        }
+
+        input[type=checkbox]+label::before,
+        input[type=radio]+label::before {
+            box-sizing: border-box;
+            position: absolute;
+            left: -18px;
+            top: 2px;
+
+            content: "";
+            display: inline-block;
+            height: 14px;
+            width: 14px;
+            background: none;
+            border: 1px solid var(--palette2);
+        }
+
+        input[type=checkbox]+label::before {
+            border-radius: 1px;
+        }
+
+        input[type=radio]+label::before {
+            border-radius: 100%;
+        }
+
+        input[type=checkbox]:checked+label::before,
+        input[type=radio]:checked+label::before {
+            background: var(--palette2);
+        }
+
+        input[type=checkbox]:focus+label::before,
+        input[type=radio]:focus+label::before {
+            border-color: #FFF;
+        }
+
+        input[type=checkbox]:focus:checked+label::before,
+        input[type=radio]:focus:checked+label::before {
+            background: var(--palette1);
+            border-color: #FFF;
+        }
+
+        input[type=checkbox]:active+label::before,
+        input[type=radio]:active+label::before {
+            border: 1px solid #FFF;
+            background: #FFF;
+        }
+
+        input[type=checkbox]+label::after,
+        input[type=radio]+label::after {
+            position: absolute;
+            box-sizing: border-box;
+
+            content: "";
+            display: inline-block;
+
+            opacity: 0;
+        }
+
+        input[type=checkbox]+label::after {
+            left: -16px;
+            top: 5px;
+
+            height: 6px;
+            width: 10px;
+            border-left: 2px solid;
+            border-bottom: 2px solid;
+            border-color: #000;
+
+            transform: rotate(-45deg);
+        }
+
+        input[type=radio]+label::after {
+            left: -16px;
+            top: 4px;
+
+            height: 10px;
+            width: 10px;
+
+            border-radius: 100%;
+            border: 2px solid #000;
+        }
+
+        input[type=checkbox]:checked+label::after,
+        input[type=radio]:checked+label::after {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <section>
+        <article class="Content" id="app">
+            Pally<br>
+            a spiritual fork to DragWx's and Bisqwit's palette generators
+
+            <noscript><br />Javascript must be enabled!</noscript>
+            <br />
+            <!-- javascript will generate stuff here -->
+        </article>
+        <footer>
+            <div>
+                <hr>
+                <a class="EmphasisText" href="https://gumball2415.github.io/src/main.html">return home</a><br />
+                <a class="EmphasisText" href="https://github.com/Gumball2415/pally">Pally</a> (C) Persune
+                2025, under the MIT license<br />
+                <a class="EmphasisText" href="https://github.com/DragWx/PalGen">PalGen</a> (C) DragWx 2018, under
+                the MIT license<br />
+            </div>
+        </footer>
+    </section>
+</body>
+
+</html>

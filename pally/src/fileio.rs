@@ -12,9 +12,10 @@ use nes_ppu_cvbs::PpuColor;
 use crate::generator::palette_to_u8;
 
 /// File output format.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum FileFormatType {
     /// .pal uint8
+    #[default]
     PalUint8,
     /// .pal double
     PalDouble,
@@ -92,7 +93,7 @@ pub fn output_file(
 
 /// Flattens the `u8` color tuple array to a `u8` byte array.
 /// Stores the color channels in order: `r: u8, g: u8, b: u8`
-fn color_tuple_u8_array_to_vec_u8(buf: &[(u8, u8, u8)]) -> Vec<u8> {
+pub fn color_tuple_u8_array_to_vec_u8(buf: &[(u8, u8, u8)]) -> Vec<u8> {
     use std::iter::once;
     // flattening an array of tuples
     // https://users.rust-lang.org/t/flattening-a-vector-of-tuples/11409/4

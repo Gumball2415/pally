@@ -1,0 +1,124 @@
+:root {
+	--trans: rgba(0, 0, 0, 0);
+	--bgblack: rgba(0, 0, 0, 0.75);
+	--bggray1: #080808;
+	--bggray2: #121212;
+	--bggray3: #525252;
+	--bggray4: #969696;
+	--textcolor: white;
+	--palette1: rgb(255, 47, 104);
+	--palette2: rgb(178, 0, 47);
+	--palette3: rgb(87, 0, 23);
+	--palette4: #3c2ca9;
+	--monohue: -16.5deg;
+	--monosat: 100%;
+	--monolum: 100%;
+	--width: 800px;
+}
+@font-face {
+	font-family: "Fixedsys Excelsior 301";
+	src: url("fsex300-webfont.ttf") format("truetype");
+}
+body {
+	background: var(--bggray2) url("glitch.png") fixed center;
+	color: white;
+	font-family: 'Source Code Pro', sans-serif;
+	font-size: 16px;
+	margin: 20px;
+	scroll-behavior: smooth;
+}
+section {
+	width: min(80vw, 1200px);
+}
+header {
+	font-family: "Fixedsys Excelsior 301", monospace;
+	font-size: 60px;
+	background-color: var(--trans);
+	padding: 60px;
+}
+hr {
+	margin-top: 10px;
+}
+footer {
+	background-color: var(--bggray1);
+	padding: 20px;
+	clear: both;
+}
+article {
+	background-color: var(--bggray1);
+	padding: 20px;
+	padding-bottom: 0px;
+	text-align: justify;
+}
+a {
+	background-color: transparent;
+	text-decoration: none;
+	transition: color 0.5S;
+}
+a:link {
+	color: var(--palette1);
+}
+a:visited {
+	color: var(--palette2);
+}
+a:hover {
+	color: white;
+}
+a:active {
+	color: var(--palette3);
+	transition: color 0S;
+}
+p {
+	text-indent: 2.5em;
+}
+ul {
+	margin: 0px;
+	text-align: left;
+	list-style-type: "- "
+}
+.Content {
+	background-color: var(--bggray1);
+}
+.Center{
+	text-align: center;
+}
+.Left {
+	float: left;
+	width: 30%;
+}
+.Right {
+	float: right;
+	width: 70%;
+}
+.Middle {
+	float: center;
+	width: 50%;
+}
+.EmphasisTab {
+	margin: 0px;
+	text-align: center;
+	font-family: 'Fixedsys Excelsior 301', monospace;
+	font-size: 20px;
+	background-color: var(--bggray2);
+	color: var(--palette1);
+	transition: color 0.5S;
+}
+.EmphasisTab:hover {
+	color: white;
+}
+.EmphasisText {
+	margin: 0px;
+	text-align: center;
+	font-family: 'Fixedsys Excelsior 301', monospace;
+	color: var(--palette1);
+	transition: color 0S 0.5S;
+}
+.EmphasisText:hover {
+	color: white;
+}
+@media (max-width: 600px) {
+	article {
+		width: 100%;
+		height: auto;
+	}
+}

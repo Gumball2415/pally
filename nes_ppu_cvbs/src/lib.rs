@@ -264,8 +264,9 @@ impl LvlCVBSTable {
 }
 
 /// The PPU to emulate video output of. Only currently supporting 2C02
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum PpuType {
+    #[default]
     _2C02,
     _2C03,
     _2C04_0000,
@@ -294,6 +295,7 @@ impl fmt::Display for PpuType {
 }
 
 /// Settings for adjusting the encoding of signals
+#[derive(Debug)]
 pub struct EncodeConfig {
     /// PPU chip used for generating colors. Default = `PpuType::_2C02`
     pub ppu: PpuType,
@@ -355,6 +357,7 @@ impl EncodeConfig {
 
 /// Holds the signal lookup table and the encoder configurations, as well as the
 /// methods for encoding a PPU pixel to a composite signal.
+#[derive(Debug)]
 pub struct NesPpuCvbs {
     pub lut: LvlCVBSTable,
     pub cfg: EncodeConfig,

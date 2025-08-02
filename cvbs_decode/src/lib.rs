@@ -4,9 +4,10 @@ use std::fmt;
 
 use clap::ValueEnum;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default)]
 pub enum DecoderType {
     /// FIR non-complementary lowpass
+    #[default]
     FIR,
     /// 2-line comb filtering. Also PAL delay line
     Comb2Line,
@@ -25,7 +26,7 @@ impl fmt::Display for DecoderType {
 }
 
 /// Method for clipping out-of-range RGB colors.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ClipType {
     /// If any of the RGB channels are greater than 1.0, subtract all channels
     /// by delta of highest value.
@@ -40,7 +41,7 @@ pub enum ClipType {
 }
 
 /// Method for scaling out-of-range RGB colors into gamut.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum NormalizeType {
     /// Scale all RGB values within 0.0 to 1.0.
     Scale,
@@ -49,6 +50,7 @@ pub enum NormalizeType {
 }
 
 /// Settings for adjusting decoding
+#[derive(Debug)]
 pub struct DecodeConfig {
     /// Black point, in IRE units, default = `0.0`
     pub black_point: f64,
