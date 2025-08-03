@@ -282,26 +282,36 @@ fn normalize_channel(
 
 /// Apply clipping and renormalization, if defined.
 pub fn clip_normalize_colors(
-    (r, g, b): (f64, f64, f64),
+    palette: &[(f64, f64, f64)],
     cfg: &DecodeConfig,
-) -> (f64, f64, f64) {
-    let (r, g, b) = if let Some(clip) = cfg.clip {
-        // clip takes priority over normalize
-        match clip {
-            ClipType::Darken => color_clip_darken((r, g, b)),
-            ClipType::Desaturate => color_clip_desaturate((r, g ,b))
-        }
+) -> Vec<(f64, f64, f64)> {
+    let mut min: f64 = 0.0;
+    let mut max: f64 = 1.0;
+
+    for (r, g, b) in palette {
+        min = min.min(r.min(g.min(*b)));
+        max = max.max(r.max(g.max(*b)));
     }
-    else if let Some(norm) = cfg.normalize {
-            let (min, max) = match norm {
-                NormalizeType::ScaleClipNegative => (0.0, r.max(g.max(b))),
-                NormalizeType::Scale => (r.min(g.min(b)), r.max(g.max(b))),
-            };
-            normalize_color((r, g, b), min, max)
-    } else {
-        (r, g, b)
-    };
-    clip_color((r, g, b), 0.0, 1.0)
+    palette.iter().map(|(r, g, b)| {
+        let (r, g, b) = (*r, *g, *b);
+        let (r, g, b) = if let Some(clip) = cfg.clip {
+            // clip takes priority over normalize
+            match clip {
+                ClipType::Darken => color_clip_darken((r, g, b)),
+                ClipType::Desaturate => color_clip_desaturate((r, g ,b))
+            }
+        }
+        else if let Some(norm) = cfg.normalize {
+                let (min, max) = match norm {
+                    NormalizeType::ScaleClipNegative => (0.0, max),
+                    NormalizeType::Scale => (min, max),
+                };
+                normalize_color((r, g, b), min, max)
+        } else {
+            (r, g, b)
+        };
+        clip_color((r, g, b), 0.0, 1.0)
+    }).collect()
 }
 
 /// Helper function for `f64::clamp()` for a color tuple.
@@ -324,8 +334,12 @@ fn clip_color(
 fn color_clip_darken(
     (r, g, b): (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let darken_factor = r.max(g.max(b));
-    normalize_color((r, g, b), 0.0, darken_factor)
+    if r > 1.0 || g > 1.0 || b > 1.0 {
+        let darken_factor = r.max(g.max(b));
+        normalize_color((r, g, b), 0.0, darken_factor)
+    } else {
+        (r, g, b)
+    }
 }
 
 
@@ -336,11 +350,15 @@ fn color_clip_darken(
 fn color_clip_desaturate(
     (r, g, b): (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let darken_factor = r.max(g.max(b));
-    let (y, _, _) = rgb_to_yuv((r, g, b));
-    let (r, g, b) = (r-y, g-y, b-y);
-    let (r, g, b) = (r/darken_factor, g/darken_factor, b/darken_factor);
-    (r+y, g+y, b+y)
+    if r > 1.0 || g > 1.0 || b > 1.0 {
+        let darken_factor = r.max(g.max(b));
+        let (y, _, _) = rgb_to_yuv((r, g, b));
+        let (r, g, b) = (r-y, g-y, b-y);
+        let (r, g, b) = (r/darken_factor, g/darken_factor, b/darken_factor);
+        (r+y, g+y, b+y)
+    } else {
+        (r, g, b)
+    }
 }
 
 use std::f64::consts;

@@ -171,9 +171,11 @@ pub fn generate_colors(
         0b000_11_1111
     };
 
-    (0..=max)
+    let palette: Vec<(f64, f64, f64)> = (0..=max)
         .map(|hue| pixel_to_rgb(encoder, decoder, hue))
-        .collect()
+        .collect();
+
+    clip_normalize_colors(&palette, decoder)
 }
 
 /// Saves the generated palette to a file, with a provided path.

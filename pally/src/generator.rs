@@ -43,13 +43,11 @@ pub fn cvbs_to_rgb(
     cb: &[f64],
     cfg: &DecodeConfig
 ) -> (f64, f64, f64) {
-    clip_normalize_colors(
-        normalize_color(
-            yuv_to_rgb(
-                decode_area(cvbs, cb, cfg)
-            ),
-            cfg.black_point, cfg.white_point
-        ), cfg
+    normalize_color(
+        yuv_to_rgb(
+            decode_area(cvbs, cb, cfg)
+        ),
+        cfg.black_point, cfg.white_point
     )
 }
 

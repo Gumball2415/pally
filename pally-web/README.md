@@ -5,6 +5,7 @@ Yet another NES palette generator, made with Rust for the web!
 ## Requirements
 
 - [`wasm-bindgen`](https://github.com/wasm-bindgen/wasm-bindgen)
+- [`wasm-pack`](https://crates.io/crates/wasm-pack)
 
 ```sh
 cargo install -f wasm-bindgen-cli

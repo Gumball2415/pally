@@ -13,9 +13,9 @@ extern "C" {
     fn log(s: &str);
 }
 
-macro_rules! console_log {
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
+// macro_rules! console_log {
+//     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+// }
 
 // const PALETTE_SIZE: usize = 64 * 8 * 3;
 // static mut PALETTE_BUFFER: [u8; PALETTE_SIZE] = [0; PALETTE_SIZE];
