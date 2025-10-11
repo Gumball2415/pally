@@ -180,7 +180,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.22.1
+version 0.23.0
 ```
 
 ## License

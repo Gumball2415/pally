@@ -30,7 +30,7 @@ example_palettes: ${examples_dir}\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal\
-	${examples_dir}/2C05-99_composite_forple.pal\
+	${examples_dir}/2C05-99.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC-1953.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC-J.pal\
@@ -64,9 +64,9 @@ ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal:
 ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal:
 	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -gai -6.5 -blp 6 -aps 5 -ela 0.01429 -cld -phd 3 -o $@
 
-# forple's Titler palette
-${examples_dir}/2C05-99_composite_forple.pal:
-	${PY} pally.py --skip-plot -ppu "2C05-99" -e -sat 0.8 -cld -o  $@
+# Titler palette
+${examples_dir}/2C05-99.pal:
+	${PY} pally.py --skip-plot -ppu "2C05-99" -e -cld -o  $@
 
 # NTSC standard
 ${examples_dir}/2C02G_phs_aps_ela_NTSC.pal:

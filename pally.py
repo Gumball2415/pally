@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.22.1"
+VERSION = "0.23.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -1005,13 +1005,6 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x772,0x773,0x572,0x473,0x276,0x467,0x000,0x000,0x000
             ], np.uint16)
 
-
-    RGB_to_YIQ = np.array([
-        RGB_to_YUV[0,:],
-        ((RGB_to_YUV[1,:] * np.cos(IQ_tilt)) - (RGB_to_YUV[2,:]*np.sin(IQ_tilt))),
-        ((RGB_to_YUV[1,:] * np.sin(IQ_tilt)) + (RGB_to_YUV[2,:]*np.cos(IQ_tilt)))
-    ], np.float64)
-
     def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
         red = ((signal_triplet & 0xF00) >> 8) if not (emphasis & 0b001) else 7
         green = ((signal_triplet & 0x0F0) >> 4) if not (emphasis & 0b010) else 7
@@ -1068,11 +1061,12 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 YUV_buffer[emphasis, luma, hue] += args.gain
 
                 # encode RGB to YIQ for hue and saturation adjustment
-                YUV_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YIQ, YUV_buffer[emphasis, luma, hue])
+                YUV_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YUV, YUV_buffer[emphasis, luma, hue])
 
                 # Titler functionality
                 if (args.ppu == "2C05-99"):
-                    # reduce Q component by half
+                    # reduce saturation by half
+                    YUV_buffer[emphasis, luma, hue, 1] *= 0.5
                     YUV_buffer[emphasis, luma, hue, 2] *= 0.5
 
                 # apply brightness and contrast
@@ -1092,9 +1086,6 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 # apply saturation
                 YUV_buffer[emphasis, luma, hue, 1] *= args.saturation
                 YUV_buffer[emphasis, luma, hue, 2] *= args.saturation
-
-                # convert to YUV for later decoding
-                YUV_buffer[emphasis, luma, hue] = np.matmul(YUV_YIQ, YUV_buffer[emphasis, luma, hue])
 
         if not (args.emphasis):
             # clip unused emphasis space
