@@ -95,6 +95,9 @@ ${examples_dir}/2C02G_phd.pal:
 # NESDev wiki palettes
 
 example_NESDev: ${examples_wiki_dir}\
+	${examples_wiki_dir}/2C02G_U_wiki_palette_page.txt\
+	${examples_wiki_dir}/2C02G_U_wiki.txt\
+	${examples_wiki_dir}/2C02G_U_wiki.pal\
 	${examples_wiki_dir}/2C02G_wiki_palette_page.txt\
 	${examples_wiki_dir}/2C02G_wiki.txt\
 	${examples_wiki_dir}/2C02G_wiki.pal\
@@ -128,6 +131,16 @@ ${examples_wiki_dir}/2C07_wiki.txt:
 
 ${examples_wiki_dir}/2C07_wiki.pal:
 	${PY} pally.py --skip-plot -cld -ppu "2C07" -phd 4 --delay-line-filter -e -o $@
+
+# 2C02G with phase skew of approx. -5 degrees and NTSC whitepoint and blackpoint
+${examples_wiki_dir}/2C02G_U_wiki_palette_page.txt:
+	${PY} pally.py --skip-plot -cld -phd 4 -blp 7.5 -o $@ -f ".txt MediaWiki"
+
+${examples_wiki_dir}/2C02G_U_wiki.txt:
+	${PY} pally.py --skip-plot -cld -phd 4 -blp 7.5 -e -o $@ -f ".txt MediaWiki"
+
+${examples_wiki_dir}/2C02G_U_wiki.pal:
+	${PY} pally.py --skip-plot -cld -phd 4 -blp 7.5 -e -o $@
 
 #2C03
 ${examples_wiki_dir}/2C03_wiki_palette_page.txt:
