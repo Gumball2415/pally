@@ -98,9 +98,9 @@ example_NESDev: ${examples_wiki_dir}\
 	${examples_wiki_dir}/2C02G_U_wiki_palette_page.txt\
 	${examples_wiki_dir}/2C02G_U_wiki.txt\
 	${examples_wiki_dir}/2C02G_U_wiki.pal\
-	${examples_wiki_dir}/2C02G_wiki_palette_page.txt\
-	${examples_wiki_dir}/2C02G_wiki.txt\
-	${examples_wiki_dir}/2C02G_wiki.pal\
+	${examples_wiki_dir}/2C02G_J_wiki_palette_page.txt\
+	${examples_wiki_dir}/2C02G_J_wiki.txt\
+	${examples_wiki_dir}/2C02G_J_wiki.pal\
 	${examples_wiki_dir}/2C07_wiki_palette_page.txt\
 	${examples_wiki_dir}/2C07_wiki.txt\
 	${examples_wiki_dir}/2C07_wiki.pal\
@@ -113,13 +113,13 @@ ${examples_wiki_dir}:
 	mkdir $@ -p
 
 # 2C02G with phase skew of approx. -5 degrees
-${examples_wiki_dir}/2C02G_wiki_palette_page.txt:
+${examples_wiki_dir}/2C02G_J_wiki_palette_page.txt:
 	${PY} pally.py --skip-plot -cld -phd 4 -o $@ -f ".txt MediaWiki"
 
-${examples_wiki_dir}/2C02G_wiki.txt:
+${examples_wiki_dir}/2C02G_J_wiki.txt:
 	${PY} pally.py --skip-plot -cld -phd 4 -e -o $@ -f ".txt MediaWiki"
 
-${examples_wiki_dir}/2C02G_wiki.pal:
+${examples_wiki_dir}/2C02G_J_wiki.pal:
 	${PY} pally.py --skip-plot -cld -phd 4 -e -o $@
 
 #2C07 with phase skew of -5 degrees and delay line filtering
