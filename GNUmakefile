@@ -24,7 +24,6 @@ clean:
 
 example_palettes: ${examples_dir}\
 	${examples_dir}/2C02_default.pal\
-	${examples_dir}/savtool_replica.pal\
 	${examples_dir}/2C02-2C07_aps_ela_persune_neutral.pal\
 	${examples_dir}/2C02G_phd.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal\
@@ -32,9 +31,11 @@ example_palettes: ${examples_dir}\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal\
 	${examples_dir}/2C05-99.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC.pal\
+	${examples_dir}/2C07_phs_aps_ela_PAL.pal
+
+#	${examples_dir}/savtool_replica.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC-1953.pal\
 	${examples_dir}/2C02G_phs_aps_ela_NTSC-J.pal\
-	${examples_dir}/2C07_phs_aps_ela_PAL.pal\
 	${examples_dir}/2C03_DeMarsh_1980s_RGB.pal
 
 # example palettes with different settings
@@ -47,8 +48,8 @@ ${examples_dir}/2C02_default.pal:
 	${PY} pally.py --skip-plot -e -o $@
 
 # replicating Bisqwit's savtool palette
-${examples_dir}/savtool_replica.pal:
-	${PY} pally.py --skip-plot -e -hue -15 -sat 0.65 -gam 2.25 -spg -rfc "NTSC (1953)" -rpw 0.3127 0.329 -o $@
+# ${examples_dir}/savtool_replica.pal:
+# 	${PY} pally.py --skip-plot -e -hue -15 -sat 0.65 -gam 2.25 -spg -rfc "NTSC (1953)" -rpw 0.3127 0.329 -o $@
 
 # somewhere between NTSC and PAL hue for a "neutral" compromise
 ${examples_dir}/2C02-2C07_aps_ela_persune_neutral.pal:
@@ -72,18 +73,19 @@ ${examples_dir}/2C05-99.pal:
 ${examples_dir}/2C02G_phs_aps_ela_NTSC.pal:
 	${PY} pally.py --skip-plot -e -blp 7.5 -aps 5 -ela 0.01429 -phd 3 -o $@
 
-${examples_dir}/2C02G_phs_aps_ela_NTSC-1953.pal:
-	${PY} pally.py --skip-plot -e -blp 7.5 -rfc "NTSC (1953)" -aps 5 -ela 0.01429 -phd 3 -o $@
+# ${examples_dir}/2C02G_phs_aps_ela_NTSC-1953.pal:
+# 	${PY} pally.py --skip-plot -e -blp 7.5 -rfc "NTSC (1953)" -aps 5 -ela 0.01429 -phd 3 -o $@
 
-${examples_dir}/2C02G_phs_aps_ela_NTSC-J.pal:
-	${PY} pally.py --skip-plot -e -rpr 0.618 0.350 -rpg 0.280 0.605 -rpb 0.152 0.063 -rpw 0.28314501 0.29711289 -aps 5 -ela 0.01429 -phd 3 -o $@
+# ${examples_dir}/2C02G_phs_aps_ela_NTSC-J.pal:
+# 	${PY} pally.py --skip-plot -e -rpr 0.618 0.350 -rpg 0.280 0.605 -rpb 0.152 0.063 -rpw 0.28314501 0.29711289 -aps 5 -ela 0.01429 -phd 3 -o $@
+
 # PAL standard
 ${examples_dir}/2C07_phs_aps_ela_PAL.pal:
 	${PY} pally.py --skip-plot -ppu "2C07" -e -blp 7.5 --delay-line-filter -aps 5 -ela 0.01429 -phd 4 -cld -o $@
 
 # RGB with DeMarsh primaries
-${examples_dir}/2C03_DeMarsh_1980s_RGB.pal:
-	${PY} pally.py --skip-plot -ppu "2C03" -e -rpr 0.622 0.338 -rpg 0.343 0.590 -rpb 0.153 0.059 -rpw 0.28314501 0.29711289 -o $@
+# ${examples_dir}/2C03_DeMarsh_1980s_RGB.pal:
+# 	${PY} pally.py --skip-plot -ppu "2C03" -e -rpr 0.622 0.338 -rpg 0.343 0.590 -rpb 0.153 0.059 -rpw 0.28314501 0.29711289 -o $@
 
 # 2C02 with true differential phase distortion example
 # $0x-$3x hue deviation = 13.9979287408074

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # NES PPU composite video encoder
-# Copyright (C) 2025 Persune
+# Copyright (C) 2026 Persune
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,12 +21,12 @@ import argparse
 import sys
 import numpy as np
 
-VERSION = "0.1.2"
+VERSION = "0.3.0"
 
 # signal LUTs
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[5][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+# signal[6][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
 # 5th index is purely colorburst
 signal_table_composite = np.array([
     [
@@ -49,9 +49,26 @@ signal_table_composite = np.array([
     [
         [ 0.524, 0.524 ],
         [ 0.148, 0.148 ]
+    ],
+    # sync level, blank level
+    [
+        [ 0.048, 0.048 ],
+        [ 0.312, 0.312 ]
     ]
 ], np.float64)
 
+# first 512 entries are exclusively for the 9-bit PPU pixel format: "eeellcccc".
+# these additional entries are bitshifted to avoid collisions
+SYNC_INDEX = 1 << 9
+BLANK_INDEX = 2 << 9
+COLORBURST_INDEX = 3 << 9
+
+# constants for reference
+# updated by normalize_table()
+SYNC_LEVEL = signal_table_composite[5, 0, 0]
+BLANK_LEVEL = signal_table_composite[5, 1, 0]
+WHITE_LEVEL = signal_table_composite[3, 0, 0]
+BLACK_LEVEL = signal_table_composite[1, 1, 0]
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -66,35 +83,92 @@ def parse_argv(argv):
 
     return parser.parse_args(argv[1:])
 
-# encodes a composite sample from a given PPU pixel and a given phase
+def normalize_voltage(min, max):
+    global signal_table_composite
+    global SYNC_LEVEL
+    global BLANK_LEVEL
+    global BLACK_LEVEL
+    global WHITE_LEVEL
+    signal_table_composite -= min
+    signal_table_composite /= abs(max - min)
+
+    # update constants
+    SYNC_LEVEL = signal_table_composite[5, 0, 0]
+    BLANK_LEVEL = signal_table_composite[5, 1, 0]
+    WHITE_LEVEL = signal_table_composite[3, 0, 0]
+    BLACK_LEVEL = signal_table_composite[1, 1, 0]
+
+# 2C07 phase alternation
+ALTERNATE_PHASE = (
+    0,
+
+    4,
+    3,
+    2,
+    1,
+    12,
+    11,
+    10,
+    9,
+    8,
+    7,
+    6,
+    5,
+
+    13,
+    14,
+    15
+)
+
+def pal_phase(hue: int, alternate_line=False):
+    """2C07 phase alternation"""
+    if alternate_line:
+        return ALTERNATE_PHASE[hue]
+    else:
+        return hue
+
+def in_color_phase(hue: int, phase: int, alternate_line=False):
+    """checks if current sample is high or low in a given color wave.
+
+    input is assumed to be in the value range of 1-12.
+
+    returns true if sample is high."""
+    return ((pal_phase(hue, alternate_line) + phase) % 12) >= 6
+
 def encode_composite_sample(
-    ppu_type: str,
-    emphasis: int,
-    luma: int,
-    hue: int,
+    pixel: int,
     wave_phase: int,
     sinusoidal_peak_generation: bool,
+    cburst_phase: int,
     alternate_line=False):
-    # 2C07 phase alternation
-    def pal_phase(hue):
-        if (hue >= 1 and hue <= 12) and (ppu_type == "2C07") and alternate_line:
-            # from 1...12 to 0...11
-            hue -= 1
-            hue = (-(hue - 1) % 12)
-            # return to 1...12
-            return hue+1
-        else:
-            return hue
+    """encodes a composite sample from a given PPU pixel and a given phase"""
 
-    # waveform generation
-    def in_color_phase(hue, phase):
-        return ((pal_phase(hue) + phase) % 12) < 6
+    if pixel >= SYNC_INDEX:
+        if pixel == SYNC_INDEX:
+            return SYNC_LEVEL
+        elif pixel == BLANK_INDEX:
+            return BLANK_LEVEL
+        elif pixel == COLORBURST_INDEX:
+            return signal_table_composite[
+                4,
+                int(not in_color_phase(cburst_phase, wave_phase, alternate_line)),
+                0
+            ]
+        else:
+            sys.exit(f"invalid PPU pixel. got {pixel:011b}")
+
+    emphasis = (pixel & 0b111000000) >> 6
+    luma =     (pixel & 0b000110000) >> 4
+    hue =       pixel & 0b000001111
     # 1 = emphasis activate
     if emphasis != 0:
         attenuate = int(
-            (((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
-            ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
-            ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
+            (((emphasis & 1) and not in_color_phase(
+                0xC, wave_phase, alternate_line)) or
+            ((emphasis & 2) and not in_color_phase(
+                0x4, wave_phase, alternate_line)) or
+            ((emphasis & 4) and not in_color_phase(
+                0x8, wave_phase, alternate_line))) and
             (hue < 0xE)
         )
     else: attenuate = 0
@@ -104,46 +178,33 @@ def encode_composite_sample(
         luma = 0x1
 
     # generate sinusoidal waveforms with matching p-p amplitudes
-    if (sinusoidal_peak_generation):
-        # rows $x0 and $xD
-        if (hue == 0x00):
-            return signal_table_composite[luma, 0, attenuate]
-        
-        if (hue >= 0x0D):
-            return signal_table_composite[luma, 1, attenuate]
+    if (sinusoidal_peak_generation and hue > 0x00 and hue < 0x0D):
+        wave_amp = (
+            signal_table_composite[luma, 0, attenuate] -\
+            signal_table_composite[luma, 1, attenuate]) / 2
+        wave_dc = (
+            signal_table_composite[luma, 0, attenuate] +\
+            signal_table_composite[luma, 1, attenuate]) / 2
 
-        wave_amp = (signal_table_composite[luma, 0, attenuate] - signal_table_composite[luma, 1, attenuate]) / 2
-        wave_dc = (signal_table_composite[luma, 0, attenuate] + signal_table_composite[luma, 1, attenuate]) / 2
+        return wave_dc + (
+            np.sin(
+                (2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))
+            ) * wave_amp
+        )
 
-        return wave_dc + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
-
-    # 0 = waveform high; 1 = waveform low
-    n_wave_level = int(not in_color_phase(hue, wave_phase))
+    n_wave_level = 0
 
     # rows $x0 and $xD
-    if (hue == 0x0): n_wave_level = 0
-    elif (hue >= 0xD): n_wave_level = 1
+    if (hue == 0x0):
+        n_wave_level = 0
+    elif (hue >= 0xD):
+        n_wave_level = 1
+    # 0 = waveform high; 1 = waveform low
+    else:
+        n_wave_level = int(
+            in_color_phase(hue, wave_phase, alternate_line))
 
-    output_voltage = signal_table_composite[luma, n_wave_level, attenuate]
-
-    return output_voltage
-
-# input: PPU pixel, buffer size
-# output: np.float64 array
-def encode_buffer(
-    buffer_size: int,
-    ppu_type: str,
-    emphasis: int,
-    luma: int,
-    hue: int,
-    wave_phase: int,
-    sinusoidal_peak_generation: bool,
-    alternate_line=False
-):
-    buffer = np.empty([buffer_size], np.float64)
-    for buffer_phase in range(buffer_size):
-        buffer[buffer_phase] = encode_composite_sample(ppu_type, emphasis, luma, hue, ((buffer_phase + wave_phase) % buffer_size), sinusoidal_peak_generation, alternate_line)
-    return buffer
+    return signal_table_composite[luma, n_wave_level, attenuate]
 
 def main(argv=None):
     return

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Pally - palette generator for the NES
-# Copyright (C) 2025 Persune
+# Copyright (C) 2026 Persune
 # inspired by PalGen, Copyright (C) 2018 DragWx <https://github.com/DragWx>
 # also a testbed for video decoding concepts in
 # https://www.nesdev.org/wiki/NTSC_video#Composite_decoding
@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.23.0"
+VERSION = "0.24.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -88,6 +88,11 @@ def parse_argv(argv):
         "--phase-QAM",
         action="store_true",
         help="view QAM demodulation")
+    parser.add_argument(
+        "--plot-color",
+        type=str,
+        default=None,
+        help="Plot only a specific color")
 
     # generation options
     parser.add_argument(
@@ -176,6 +181,17 @@ def parse_argv(argv):
         "--delay-line-filter",
         action = "store_true",
         help = "use 1D delay line comb filter decoding instead of single-line decoding")
+    parser.add_argument(
+        "-agc",
+        "--auto-gain-control",
+        type = str,
+        help = "automatic gain control to normalize composite IRE. default = None",
+        choices=[
+            "None",
+            "sync",
+            "burst",
+        ],
+        default = "None")
     parser.add_argument(
         "-axs",
         "--axis-shift",
@@ -396,8 +412,8 @@ YUV_to_RGB_CXA_US = np.array([
     YUV_to_RGB[2,:]
 ], np.float64)
 
-composite_black = ppu.signal_table_composite[1, 1, 0]
-composite_white = ppu.signal_table_composite[3, 0, 0]
+composite_black = ppu.BLACK_LEVEL
+composite_white = ppu.WHITE_LEVEL
 composite_CbL = ppu.signal_table_composite[4, 1, 0]
 composite_CbH = ppu.signal_table_composite[4, 0, 0]
 
@@ -658,33 +674,26 @@ def normalize_RGB(RGB_buffer, args=None):
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     colorburst_phase = 0
-    colorburst_offset = 0
+    # to make things simple; we assume the next line phase shift is a even multiple of the color subcarrier wavelength.
     next_line_shift = 0
+
     if (args.ppu == "2C07"):
         # $x7 == -U - 45 degrees
         # will flip to -U + 45 in pal_phase()
         colorburst_phase = 7
-        colorburst_offset = 2
-        next_line_shift = 2
+        # PAL delay line decoding depends on the next line being offset!
+        next_line_shift = 0#12-(341*10)%12
     else:
         # $x8 = -U
         colorburst_phase = 8
-        colorburst_offset = 1.5
-        next_line_shift = 4
-    
-    # on regular NTSC composite, a single delay line filter is enough to cancel
-    # the chroma due to the phase being exactly 180 degrees offset on the next
-    # line. but since this is NES, the 120 degree offset causes the colors to
-    # shift by -30 degrees, and losing a bit of saturation.
-    if args.delay_line_filter:
-        colorburst_phase -= 1
+        next_line_shift = 12-(341*8)%12
 
     colorburst_factor = 6
     colorgen_x_factor = 2
     buffer_size = int(colorburst_factor * colorgen_x_factor)
 
     # timepoints for generating the subcarrier reference sines
-    t = np.arange(buffer_size) - colorburst_offset - colorburst_phase
+    t = np.arange(buffer_size) - colorburst_phase
 
     # 2x due to integral of sin(2*PI*x)^2
     saturation_correction = 2
@@ -697,7 +706,31 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         colorburst_amplitude = 140 * (composite_CbH - composite_CbL) # in IRE
         saturation_correction *= colorburst_amp_reference/colorburst_amplitude
 
+    # input: PPU pixel, buffer size
+    # output: np.float64 array
+    def encode_buffer(
+        buffer_size: int,
+        colorburst: bool,
+        pixel: int,
+        wave_phase: int,
+        sinusoidal_peak_generation: bool,
+        cburst_phase: int,
+        alternate_line=False
+    ):
+        PAL_alt = args.ppu == "2C07" and alternate_line
+        buffer = np.empty([buffer_size], np.float64)
 
+        if colorburst: pixel = ppu.COLORBURST_INDEX
+
+        for buffer_phase in range(buffer_size):
+            buffer[buffer_phase] = ppu.encode_composite_sample(
+                pixel,
+                ((buffer_phase + wave_phase) % buffer_size),
+                sinusoidal_peak_generation,
+                cburst_phase,
+                PAL_alt
+            )
+        return buffer
 
     # signal buffers for decoding
     # 11111------1
@@ -739,23 +772,24 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         # also apply brightness and contrast
         YUV[0] = (voltage_avg + emphasis_row_luma) * args.contrast + args.brightness
         return YUV, U_buffer, V_buffer
-    
+
     def decode_composite_dline(voltage_buffer, U_buffer, V_buffer):
         YUV = np.zeros((3), np.float64)
 
-        # bandpass UV components, if PAL
+        # bandpass UV components
         voltage_bandpass = voltage_buffer.copy()
         voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
-        # bandpass and combine lines in specific way to retrieve U and V
-        # based on Single Delay Line PAL Y/C Separator
-        # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
-        # Demystified (5th ed., p. 450). Elsevier.
-        # https://archive.org/details/video-demystified-5th-edition/
 
         # naive 1D comb chroma bandpass
         V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
 
         if (args.ppu == "2C07"):
+            # PAL delayline
+            # bandpass and combine lines in specific way to retrieve U and V
+            # based on Single Delay Line PAL Y/C Separator
+            # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
+            # Demystified (5th ed., p. 450). Elsevier.
+            # https://archive.org/details/video-demystified-5th-edition/
             # invert combination to retrieve U
             U_buffer[2] = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
         else:
@@ -831,11 +865,39 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         signal_V = np.average(signal.real * V)
         return np.atan2(signal_U, signal_V)
 
+    cb_decode = encode_buffer(buffer_size, True, 0, 0, args.sinusoidal_peak_generation, colorburst_phase)
+    # average burst between two lines
+    if args.delay_line_filter:
+        if args.ppu == "2C07":
+            # add to get -U
+            cb_decode += encode_buffer(buffer_size, True, 0, next_line_shift, args.sinusoidal_peak_generation, colorburst_phase)
+        else:
+            cb_decode -= encode_buffer(buffer_size, True, 0, next_line_shift, args.sinusoidal_peak_generation, colorburst_phase)
+        cb_decode /= 2
+        cb_decode *= 1
+
+    cb_decode = np.tile(cb_decode, repeat_cycle)
+    cb_decode = RC_lowpass(cb_decode, args.phase_distortion)
+
+    cb_decode = cb_decode[signal_start:signal_stop]
+
+    # lowpass to cutoff freq
+    # U_decode = fft(U_decode, n=len(U_decode))
+    # U_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
+    # U_decode = ifft(U_decode, n=len(U_decode))
+
+    # determine phase shift by QAM demodulating
+
+
+    U_phase = QAM_phase(cb_decode)
+
     for emphasis in range(8):
         for luma in range(4):
             for hue in range(16):
+                pixel = (emphasis&0b111)<<6 | (luma&0b11)<<4 | (hue&0b1111)
                 # used for image sequence plotting
                 sequence_counter = hue + (luma*16) + (emphasis*16*4)
+
                 # zero out buffers to prevent error propagation
                 voltage_buffer.fill(0)
                 U_buffer.fill(0)
@@ -858,62 +920,20 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
 
                 # encode voltages into composite waveform
-                voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
+                voltage_buffer[0] = encode_buffer(buffer_size, False, pixel, 0, args.sinusoidal_peak_generation, colorburst_phase)
 
                 # simulate next line by incrementing wave phase and alternating phase
-                voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, True)
+                voltage_buffer[1] = encode_buffer(buffer_size, False, pixel, next_line_shift, args.sinusoidal_peak_generation, colorburst_phase, True)
 
-                # subcarrier generation is 180 degrees offset
-                # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
-                # if the subcarrier moves forward in angle, the resulting hue goes backwards
-                # hue argument is therefore inverse here
-                if args.phase_distortion != 0:
-                    # generate U and V decoder waveforms based on phase skew
-                    U_offset = 0.5 if args.ppu == "2C07" else 0
-                    U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, ((6+colorburst_phase-1)%12)+1, 0, args.sinusoidal_peak_generation)
+                # generate a new sine using this phase offset
+                U_buffer[1] = np.cos(2 * np.pi / buffer_size * t - U_phase +
+                    np.radians(antiemphasis_column_chroma - args.hue)
+                ) * args.saturation * saturation_correction
 
-                    U_decode = np.tile(U_decode, repeat_cycle)
-                    U_decode = RC_lowpass(U_decode, args.phase_distortion)
-
-                    U_decode = U_decode[signal_start:signal_stop]
-
-                    # lowpass to cutoff freq
-                    U_decode = fft(U_decode, n=len(U_decode))
-                    U_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
-                    U_decode = ifft(U_decode, n=len(U_decode))
-
-                    # determine phase shift by QAM demodulating
-                    U_phase = QAM_phase(U_decode)
-
-                    # generate a new sine using this phase offset
-                    U_buffer[1] = np.cos(2 * np.pi / buffer_size * t - U_phase + U_offset +
-                        np.radians(antiemphasis_column_chroma - args.hue)
-                    ) * args.saturation * saturation_correction
-
-                    # ditto for V decoder, but shift phase by 90 degrees
-                    V_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, ((6+colorburst_phase-1+3)%12)+1, 0, args.sinusoidal_peak_generation)
-
-                    V_decode = np.tile(V_decode, repeat_cycle)
-                    V_decode = RC_lowpass(V_decode, args.phase_distortion)
-
-                    V_decode = V_decode[signal_start:signal_stop]
-
-                    V_decode = fft(V_decode, n=len(V_decode))
-                    V_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
-                    V_decode = ifft(V_decode, n=len(V_decode))
-
-                    V_phase = QAM_phase(V_decode)
-                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase + U_offset +
-                        np.radians(antiemphasis_column_chroma - args.hue)
-                    ) * args.saturation * saturation_correction
-                else:
-                    U_buffer[1] = np.sin(2 * np.pi / buffer_size * t +
-                        np.radians(antiemphasis_column_chroma - args.hue)
-                    ) * args.saturation * saturation_correction
-
-                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t +
-                        np.radians(antiemphasis_column_chroma - args.hue)
-                    ) * args.saturation * saturation_correction
+                V_phase = U_phase - np.pi/2
+                V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase +
+                    np.radians(antiemphasis_column_chroma - args.hue)
+                ) * args.saturation * saturation_correction
 
                 if args.phase_skew != 0:
                     phase_skew = args.phase_skew * luma
@@ -959,22 +979,34 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 else:
                     YUV_buffer[emphasis, luma, hue], U_buffer, V_buffer = decode_composite(voltage_buffer, U_buffer, V_buffer)
 
-                # visualize chroma decoding
-                if (args.debug):
-                    print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer[0]))
-                    U_avg = YUV_buffer[emphasis, luma, hue, 1]
-                    V_avg = YUV_buffer[emphasis, luma, hue, 2]
-                    tau = 2*np.pi
-                    color_theta = np.arctan2(V_avg, U_avg) + tau
-                    if color_theta >= 2*np.pi: color_theta -= tau
-                    color_r =  np.sqrt(U_avg**2 + V_avg**2)
-                    delay = (color_theta/tau) * (1/PPU_Cb)
-                    print("Hue angle and saturation ${0:02X}: {1}, {2}".format((luma<<4 | hue), np.rad2deg(color_theta), color_r))
-                    print("Delay ${0:02X}: {1}".format((luma<<4 | hue), delay))
-                if (args.waveforms):
-                    composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
-                if (args.phase_QAM):
-                    composite_QAM_plot(voltage_buffer, U_buffer[2], V_buffer[2], U_buffer[1], V_buffer[1], U_buffer[0], V_buffer[0], buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
+                # if plot_color is not none, plot only that
+                # else, plot all colors
+
+                # convert that color if it exists
+                plot_color = None
+                if args.plot_color is not None:
+                    plot_color = int(args.plot_color, 16)
+
+                if plot_color==pixel&0x3F and args.plot_color is not None or args.plot_color is None:
+                    # visualize chroma decoding
+                    if (args.debug):
+                        print("${0:02X} emphasis {1:03b}".format(
+                            (pixel&0b000111111),
+                            emphasis
+                        ) + "\n" + str(voltage_buffer[0]))
+                        U_avg = YUV_buffer[emphasis, luma, hue, 1]
+                        V_avg = YUV_buffer[emphasis, luma, hue, 2]
+                        tau = 2*np.pi
+                        color_theta = np.arctan2(V_avg, U_avg) + tau
+                        if color_theta >= 2*np.pi: color_theta -= tau
+                        color_r =  np.sqrt(U_avg**2 + V_avg**2)
+                        delay = (color_theta/tau) * (1/PPU_Cb)
+                        print("Hue angle and saturation ${0:02X}: {1}, {2}".format((luma<<4 | hue), np.rad2deg(color_theta), color_r))
+                        print("Delay ${0:02X}: {1}".format((luma<<4 | hue), delay))
+                    if (args.waveforms):
+                        composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
+                    if (args.phase_QAM):
+                        composite_QAM_plot(voltage_buffer, U_buffer[2], V_buffer[2], U_buffer[1], V_buffer[1], U_buffer[0], V_buffer[0], buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
 
         if not (args.emphasis):
             # clip unused emphasis space
@@ -1241,14 +1273,14 @@ def main(argv=None):
         else:
             x_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[colorspace].whitepoint_name
             x_colorspace.whitepoint = colour.RGB_COLOURSPACES[colorspace].whitepoint
-        
+
         if (opto_electronic is not None):
             x_colorspace.cctf_encoding = lambda x: colour.cctf_encoding(x, function=args.opto_electronic)
             x_colorspace.cctf_encoding_name = opto_electronic
         else:
             x_colorspace.cctf_encoding = colour.RGB_COLOURSPACES[colorspace].cctf_encoding
             x_colorspace.cctf_encoding_name = colorspace
-        
+
         if (electro_optic is not None):
             x_colorspace.cctf_decoding = lambda x: colour.cctf_decoding(x, function=args.electro_optic)
             x_colorspace.cctf_decoding_name = electro_optic
@@ -1284,15 +1316,15 @@ def main(argv=None):
                 args.reference_primaries_b,
                 args.reference_primaries_w,
                 electro_optic=electro_optic)
-    
+
         t_colorspace = init_colorspace(args.display_colorspace,
             args.display_primaries_r,
             args.display_primaries_g,
             args.display_primaries_b,
             args.display_primaries_w,
             opto_electronic=opto_electronic)
-        if (args.debug): print(s_colorspace)
-        if (args.debug): print(t_colorspace)
+        if (args.debug): print(s_colorspace, end="\n\n")
+        if (args.debug): print(t_colorspace, end="\n\n")
 
         # decoded RGB buffer
         # has to be zero'd out for the normalize function to work
