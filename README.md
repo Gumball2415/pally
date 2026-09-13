@@ -2,7 +2,7 @@
 
 Previously known as `palgen_persune`, `palgen-persune`.
 
-Yet another NES palette generator, in Python
+An analog signal-based NES palette generator.
 
 ![A diagram of a generated palette, with CIE XY chromaticities, color phase, a test image, and color swatches.](docs/diagrams/palette_preview.png)
 ![An animated diagram showing the voltage of a period of a given color.](docs/diagrams/waveform_phase.gif)
@@ -56,7 +56,7 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-dpb DISPLAY_PRIMARIES_B DISPLAY_PRIMARIES_B]
                 [-dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W]
 
-yet another NES palette generator
+an analog signal-based NES palette generator
 
 options:
   -h, --help            show this help message and exit
@@ -187,7 +187,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.24.1
+version 0.24.2
 ```
 
 ## License

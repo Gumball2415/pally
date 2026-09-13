@@ -124,7 +124,7 @@ ${examples_wiki_dir}/2C02G_J_wiki.txt:
 ${examples_wiki_dir}/2C02G_J_wiki.pal:
 	${PY} pally.py --skip-plot -cld -phd 4 -e -o $@
 
-#2C07 with phase skew of -5 degrees and delay line filtering
+# 2C07 with phase skew of approx. -5 degrees and delay line filtering
 ${examples_wiki_dir}/2C07_wiki_palette_page.txt:
 	${PY} pally.py --skip-plot -cld -ppu "2C07" -phd 4 --delay-line-filter -o $@ -f ".txt MediaWiki"
 
@@ -144,7 +144,7 @@ ${examples_wiki_dir}/2C02G_U_wiki.txt:
 ${examples_wiki_dir}/2C02G_U_wiki.pal:
 	${PY} pally.py --skip-plot -cld -phd 4 -blp 7.5 -e -o $@
 
-#2C03
+# 2C03
 ${examples_wiki_dir}/2C03_wiki_palette_page.txt:
 	${PY} pally.py --skip-plot -cld -ppu "2C03" -o $@ -f ".txt MediaWiki"
 

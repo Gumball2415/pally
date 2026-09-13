@@ -25,11 +25,11 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.24.1"
+VERSION = "0.24.2"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
-        description="yet another NES palette generator",
+        description="an analog signal-based NES palette generator",
         epilog="version " + VERSION)
     # output options
     parser.add_argument(
