@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.24.0"
+VERSION = "0.24.1"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -61,6 +61,11 @@ def parse_argv(argv):
         ],
         default=".pal uint8",
         help="file output format. default = \".pal uint8\"")
+    parser.add_argument(
+        "-yuv",
+        "--yuv-format",
+        action="store_true",
+        help="Store color information in raw Y, b-y, and r-y (YUV) triplet values instead of RGB. Disables colorimetry and normalization.")
     parser.add_argument(
         "-e",
         "--emphasis",
@@ -1302,7 +1307,7 @@ def main(argv=None):
         electro_optic = args.electro_optic
         opto_electronic = args.opto_electronic
 
-        if (args.colorimetry_disable):
+        if (args.colorimetry_disable or args.yuv_format):
             s_colorspace = init_colorspace(args.display_colorspace,
                 args.display_primaries_r,
                 args.display_primaries_g,
@@ -1351,13 +1356,18 @@ def main(argv=None):
         else:
             RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
 
-        # convert back to RGB
+        # convert back to RGB, if permitted
         YUV_to_RGB_matrix = {
             "None": YUV_to_RGB,
             "CXA2025AS_JP": YUV_to_RGB_CXA_JP,
             "CXA2025AS_US": YUV_to_RGB_CXA_US,
             "bisqwit_NTSC_1953": YUV_to_RGB_bisqwit
         }
+
+        if args.yuv_format:
+            raw_yuv = RGB_buffer
+            raw_yuv -= signal_black_point
+            raw_yuv /= (signal_white_point - signal_black_point)
 
         RGB_buffer = np.einsum('ij,klj->kli', YUV_to_RGB_matrix[args.axis_shift], RGB_buffer, dtype=np.float64)
 
@@ -1372,7 +1382,7 @@ def main(argv=None):
         # preserve uncorrected RGB for color plotting
         RGB_uncorrected = RGB_buffer
 
-        if (not args.colorimetry_disable):
+        if (not args.colorimetry_disable or not args.yuv_format):
             # convert RGB to display output
             if args.gamma is not None:
                 # electro-optic transfer via gamma function
@@ -1447,7 +1457,10 @@ def main(argv=None):
 
         }
         if (args.output is not None and args.render_img is None and args.test_image is None):
-            output_format[args.file_format](RGB_buffer, args)
+            if args.yuv_format:
+                output_format[args.file_format](raw_yuv, args)
+            else:
+                output_format[args.file_format](RGB_buffer, args)
 
         s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
         t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)

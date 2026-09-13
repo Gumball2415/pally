@@ -15,7 +15,7 @@ else
 	PY := python3
 endif
 
-.PHONY: example_palettes example_NESDev diagrams all
+.PHONY: example_palettes example_NESDev diagrams all usage.txt
 
 all: example_palettes example_NESDev diagrams
 
@@ -164,7 +164,6 @@ ${examples_wiki_dir}/2C03_wiki.pal:
 diagrams: ${diagrams_dir}\
 	usage.txt\
 	${diagrams_dir}/addie.png\
-	${diagrams_dir}/minae.png\
 	${diagrams_dir}/palette_preview_emphasis.gif
 	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir} -phd 4
 	${PY} pally.py --skip-plot -r png -t docs/smb.bin -o ${diagrams_dir}
@@ -180,9 +179,6 @@ usage.txt:
 
 ${diagrams_dir}/addie.png:
 	${PY} pally.py --skip-plot -t docs/addie.bin -phd 4 -o $@
-
-${diagrams_dir}/minae.png:
-	${PY} pally.py --skip-plot -ppu "2C05-99" -t docs/minae.bin -o $@
 
 ${diagrams_dir}/palette_preview_emphasis.gif:
 	${PY} pally.py --skip-plot -e -r png -o ${diagrams_dir}
