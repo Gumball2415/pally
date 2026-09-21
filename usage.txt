@@ -3,9 +3,9 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-yuv] [-e] [-t TEST_IMAGE] [-r RENDER_IMG] [-w] [-p]
                 [--plot-color PLOT_COLOR] [-n {scale,scale clip negative}]
                 [-ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}]
-                [-c {darken,desaturate}] [-bri BRIGHTNESS] [-con CONTRAST]
-                [-hue HUE] [-sat SATURATION] [-blp BLACK_POINT]
-                [-whp WHITE_POINT] [-gai GAIN] [-gam GAMMA]
+                [-c {none,clip,darken,desaturate}] [-bri BRIGHTNESS]
+                [-con CONTRAST] [-hue HUE] [-sat SATURATION]
+                [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN] [-gam GAMMA]
                 [--delay-line-filter] [-agc {None,sync,burst}]
                 [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
                 [-bse] [-spg] [-phs PHASE_SKEW] [-phd PHASE_DISTORTION]
@@ -55,8 +55,9 @@ options:
                         normalize all colors within gamut by scaling values
   -ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}, --ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}
                         PPU chip used for generating colors. default = 2C02
-  -c {darken,desaturate}, --clip {darken,desaturate}
-                        clips out-of-gamut RGB colors
+  -c {none,clip,darken,desaturate}, --clip {none,clip,darken,desaturate}
+                        clips out-of-gamut RGB colors. disabling this may
+                        cause undefined behavior in non-signed formats.
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         luma brightness delta in IRE units, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -155,4 +156,4 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.24.2
+version 0.25.0

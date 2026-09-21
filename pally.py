@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.24.2"
+VERSION = "0.25.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -130,11 +130,14 @@ def parse_argv(argv):
         "-c",
         "--clip",
         type=str,
-        help="clips out-of-gamut RGB colors",
+        help="clips out-of-gamut RGB colors. disabling this may cause undefined behavior in non-signed formats.",
         choices=[
+            "none",
+            "clip",
             "darken",
             "desaturate"
-        ])
+        ],
+        default="clip")
 
     # color decoding options
     parser.add_argument(
@@ -448,6 +451,10 @@ def palette_plot(RGB_buffer,
         RGB_sub = RGB_buffer
         RGB_sub_raw = RGB_uncorrected
 
+    # colors may or may not be beyond 0-1. clip to be sure
+    c_RGB_sub = np.clip(RGB_sub, 0, 1)
+    c_RGB_sub_raw = np.clip(RGB_sub_raw, 0, 1)
+
     fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
 
@@ -463,7 +470,7 @@ def palette_plot(RGB_buffer,
                 preview_image = np.empty([240,256,3], np.float64)
                 for y in range(index_image.shape[0]):
                     for x in range(index_image.shape[1]):
-                        preview_image[y,x] = RGB_sub[(index_image[y,x] >> 4), (index_image[y,x] & 0x0F)]
+                        preview_image[y,x] = c_RGB_sub[(index_image[y,x] >> 4), (index_image[y,x] & 0x0F)]
                 ax3.set_title("Palette preview")
                 ax3.imshow(preview_image)
         else:
@@ -479,7 +486,7 @@ def palette_plot(RGB_buffer,
 
     # colors
     ax0.set_title("Color swatches")
-    ax0.imshow(RGB_sub)
+    ax0.imshow(c_RGB_sub)
 
     # polar plot
     YUV_calc = np.einsum('ij,klj->kli', RGB_to_YUV, RGB_sub, dtype=np.float64)
@@ -489,14 +496,14 @@ def palette_plot(RGB_buffer,
     ax1.set_title("RGB color phase")
     ax1.set_yticklabels([])
     ax1.axis([0, 2*np.pi, 0, 1])
-    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_sub,(RGB_sub.shape[0]*RGB_sub.shape[1], 3)), marker=None, s=color_r*500, zorder=3)
+    ax1.scatter(color_theta, color_r, c=np.reshape(c_RGB_sub,(RGB_sub.shape[0]*RGB_sub.shape[1], 3)), marker=None, s=color_r*500, zorder=3)
 
     # CIE graph
     colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
         RGB_sub_raw,
         colourspace=s_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub_raw,(RGB_sub_raw.shape[0]*16, 3)),alpha=0.1),
+        scatter_kwargs=dict(c=np.reshape(c_RGB_sub_raw,(RGB_sub_raw.shape[0]*16, 3)),alpha=0.1),
         plot_kwargs=dict(color="gray"),
         figure=fig,
         axes=ax2,
@@ -509,7 +516,7 @@ def palette_plot(RGB_buffer,
         RGB_sub,
         colourspace=t_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub,(RGB_sub.shape[0]*16, 3))),
+        scatter_kwargs=dict(c=np.reshape(c_RGB_sub,(RGB_sub.shape[0]*16, 3))),
         plot_kwargs=dict(color="red"),
         figure=fig,
         axes=ax2,
@@ -663,19 +670,18 @@ def normalize_RGB(RGB_buffer, args=None):
                     RGB_buffer[luma, chroma] += YUV_calc[0]
 
     # clip takes priority over normalize
-    if (args.clip is not None):
+    if (args.clip != "none"):
         match args.clip:
             case "darken":
                 color_clip_darken(RGB_buffer)
             case "desaturate":
                 color_clip_desaturate(RGB_buffer)
+            case "clip":
+                np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
     elif (args.normalize is not None):
         if (args.normalize != "scale clip negative"):
             RGB_buffer -= np.amin(RGB_buffer)
         RGB_buffer /= np.amax(RGB_buffer)
-
-    # clip to 0.0-1.0 to ensure everything is within range
-    np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     colorburst_phase = 0
@@ -1369,14 +1375,17 @@ def main(argv=None):
             raw_yuv -= signal_black_point
             raw_yuv /= (signal_white_point - signal_black_point)
 
-        RGB_buffer = np.einsum('ij,klj->kli', YUV_to_RGB_matrix[args.axis_shift], RGB_buffer, dtype=np.float64)
+        RGB_buffer = np.einsum('ij,klj->kli',
+                               YUV_to_RGB_matrix[args.axis_shift],
+                               RGB_buffer,
+                               dtype=np.float64)
 
         # apply black and white points
         # this also scales the values back roughly within range of 0 to 1
         RGB_buffer -= signal_black_point
         RGB_buffer /= (signal_white_point - signal_black_point)
 
-        # fit RGB within range of 0.0-1.0
+        # pre-clipping to avoid undefined behavior with colour-science
         normalize_RGB(RGB_buffer, args)
 
         # preserve uncorrected RGB for color plotting
@@ -1409,9 +1418,6 @@ def main(argv=None):
                             chromatic_adaptation_transform=args.chromatic_adaptation_transform)
                         if (args.debug): print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
 
-                # clip to 0.0-1.0 to ensure everything is within range
-                np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-
                 # opto-electronic transfer via gamma function
                 if (not args.opto_electronic_disable):
                     RGB_buffer = colour.gamma_function(RGB_buffer, 1/args.gamma)
@@ -1441,9 +1447,10 @@ def main(argv=None):
                             apply_cctf_encoding=(not args.opto_electronic_disable))
                         if (args.debug): print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
 
-            # clip again, the transform may produce values beyond 0-1
-            normalize_RGB(RGB_buffer, args)
-            normalize_RGB(RGB_uncorrected, args)
+        # if permitted, clip
+        # this may produce values beyond 0-1
+        normalize_RGB(RGB_buffer, args)
+        normalize_RGB(RGB_uncorrected, args)
 
         output_format = {
             ".pal uint8": output_binary_uint8,
