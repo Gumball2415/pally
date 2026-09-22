@@ -53,11 +53,11 @@ ${examples_dir}/2C02_default.pal:
 
 # somewhere between NTSC and PAL hue for a "neutral" compromise
 ${examples_dir}/2C02-2C07_aps_ela_persune_neutral.pal:
-	${PY} pally.py --skip-plot -e -hue -3.75 -bse -aps 5 -ela 0.01429 -cld -o $@
+	${PY} pally.py --skip-plot -e -hue -3.75 -bse -aps 5 -ela 0.01429 -cld -phd 0 -o $@
 
 # based on measurements of my own composite decoders
 ${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal:
-	${PY} pally.py --skip-plot -e -hue 2.5 -bse -aps 5 -ela 0.01429 -cld -o $@
+	${PY} pally.py --skip-plot -e -hue 2.5 -bse -aps 5 -ela 0.01429 -cld -phd 0 -o $@
 
 ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal:
 	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -aps 5 -ela 0.01429 -cld -phd 3 -o $@
@@ -67,7 +67,7 @@ ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal:
 
 # Titler palette
 ${examples_dir}/2C05-99.pal:
-	${PY} pally.py --skip-plot -ppu "2C05-99" -e -cld -o  $@
+	${PY} pally.py --skip-plot -ppu "2C05-99" -e -cld -phd 0 -o $@
 
 # NTSC standard
 ${examples_dir}/2C02G_phs_aps_ela_NTSC.pal:
@@ -165,7 +165,7 @@ diagrams: ${diagrams_dir}\
 	usage.txt\
 	${diagrams_dir}/addie.png\
 	${diagrams_dir}/palette_preview_emphasis.gif
-	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir} -phd 4
+	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir}
 	${PY} pally.py --skip-plot -r png -t docs/smb.bin -o ${diagrams_dir}
 	ffmpeg -framerate 2 -i "${diagrams_dir}/QAM_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/QAM_phase.gif" -y
 	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform_phase.gif" -y
@@ -178,7 +178,7 @@ usage.txt:
 	${PY} pally.py -h >> $@
 
 ${diagrams_dir}/addie.png:
-	${PY} pally.py --skip-plot -t docs/addie.bin -phd 4 -o $@
+	${PY} pally.py --skip-plot -t docs/addie.bin -o $@
 
 ${diagrams_dir}/palette_preview_emphasis.gif:
 	${PY} pally.py --skip-plot -e -r png -o ${diagrams_dir}

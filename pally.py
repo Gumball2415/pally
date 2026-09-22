@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.26.0"
+VERSION = "0.27.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -230,8 +230,8 @@ def parse_argv(argv):
         "-phd",
         "--phase-distortion",
         type = np.float64,
-        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (level/composite_white) * 1e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 4 very roughly corresponds to a -5 degree delta per luma row. default = 0.0",
-        default = 0.0)
+        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (level/composite_white) * 1e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 4 very roughly corresponds to a -5 degree delta per luma row. default = 4.0",
+        default = 4.0)
     parser.add_argument(
         "-aps",
         "--antiemphasis-phase-skew",
