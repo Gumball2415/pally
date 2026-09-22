@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.25.0"
+VERSION = "0.26.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -130,7 +130,7 @@ def parse_argv(argv):
         "-c",
         "--clip",
         type=str,
-        help="clips out-of-gamut RGB colors. disabling this may cause undefined behavior in non-signed formats.",
+        help="clips out-of-gamut RGB colors. disabling this may cause undefined behavior in non-signed formats. This also causes some colors to be indeterminate (NAN) if applying a CCTF or gamma transfer function. Default = \"clip\"",
         choices=[
             "none",
             "clip",
@@ -180,11 +180,6 @@ def parse_argv(argv):
         type = np.float64,
         help = "gain adjustment to signal before decoding, in IRE units, default = 0.0",
         default = 0.0)
-    parser.add_argument(
-        "-gam",
-        "--gamma",
-        type = np.float64,
-        help = "if defined, will apply a simple OETF gamma transfer function instead, where the EOTF function is assumed to be gamma 2.2.")
     parser.add_argument(
         "--delay-line-filter",
         action = "store_true",
@@ -299,6 +294,23 @@ def parse_argv(argv):
         "--colorimetry-disable",
         action = "store_true",
         help = "disable all colorimetry functions")
+    parser.add_argument(
+        "-gam",
+        "--gamma",
+        type = np.float64,
+        help = "if defined, this will apply a simple OETF gamma transfer function instead, where the EOTF function is assumed to be gamma 2.2.")
+    parser.add_argument(
+        "-gnc",
+        "--gamma-negative-clip",
+        type = str,
+        help = "Negative value handling for gamma transfer, if defined. default = Preserve",
+        choices=[
+            "Indeterminate",
+            "Mirror",
+            "Preserve",
+            "Clamp",
+        ],
+        default = "Preserve")
 
     # colorimetry reference RGB and whitepoint primaries
     parser.add_argument(
@@ -676,12 +688,12 @@ def normalize_RGB(RGB_buffer, args=None):
                 color_clip_darken(RGB_buffer)
             case "desaturate":
                 color_clip_desaturate(RGB_buffer)
-            case "clip":
-                np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
     elif (args.normalize is not None):
         if (args.normalize != "scale clip negative"):
             RGB_buffer -= np.amin(RGB_buffer)
         RGB_buffer /= np.amax(RGB_buffer)
+    if (args.clip != "none"):
+        np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     colorburst_phase = 0
@@ -1385,72 +1397,73 @@ def main(argv=None):
         RGB_buffer -= signal_black_point
         RGB_buffer /= (signal_white_point - signal_black_point)
 
-        # pre-clipping to avoid undefined behavior with colour-science
-        normalize_RGB(RGB_buffer, args)
-
         # preserve uncorrected RGB for color plotting
         RGB_uncorrected = RGB_buffer
 
-        if (not args.colorimetry_disable or not args.yuv_format):
+        if not args.colorimetry_disable or not args.yuv_format:
             # convert RGB to display output
+
+            # transform color primaries
+            if not colorspace_equality(s_colorspace, t_colorspace):
+                if args.debug: print("gamma colorspace transform!")
+                if args.inverse_chromatic_transform:
+                    if args.debug:
+                        print("inverse transform!")
+                        print(colour.matrix_RGB_to_RGB(t_colorspace, s_colorspace))
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        t_colorspace,
+                        s_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+                else:
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        s_colorspace,
+                        t_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+                    if args.debug:
+                        print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
+
+            # pre-clipping to avoid undefined behavior with CCTF
+            if args.gamma is None:
+                normalize_RGB(RGB_buffer, args)
+
+            # apply CCTF either through gamma or specified colorspace
             if args.gamma is not None:
                 # electro-optic transfer via gamma function
-                if (not args.electro_optic_disable):
-                    RGB_buffer = colour.gamma_function(RGB_buffer, 2.2)
-                    RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 2.2)
-
-                # transform color primaries
-                if not colorspace_equality(s_colorspace, t_colorspace):
-                    if (args.debug): print("gamma colorspace transform!")
-                    if (args.inverse_chromatic_transform):
-                        if (args.debug): print("inverse transform!")
-                        RGB_buffer = colour.RGB_to_RGB(
-                            RGB_buffer,
-                            t_colorspace,
-                            s_colorspace,
-                            chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-                        if (args.debug): print(colour.matrix_RGB_to_RGB(t_colorspace, s_colorspace))
-                    else:
-                        RGB_buffer = colour.RGB_to_RGB(
-                            RGB_buffer,
-                            s_colorspace,
-                            t_colorspace,
-                            chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-                        if (args.debug): print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
-
+                if not args.electro_optic_disable:
+                    RGB_buffer = colour.gamma_function(
+                        RGB_buffer,
+                        2.2,
+                        negative_number_handling=args.gamma_negative_clip
+                    )
+                    RGB_uncorrected = colour.gamma_function(
+                        RGB_uncorrected,
+                        2.2,
+                        negative_number_handling=args.gamma_negative_clip
+                    )
                 # opto-electronic transfer via gamma function
-                if (not args.opto_electronic_disable):
-                    RGB_buffer = colour.gamma_function(RGB_buffer, 1/args.gamma)
-                    RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 1/args.gamma)
-
+                if not args.opto_electronic_disable:
+                    RGB_buffer = colour.gamma_function(
+                        RGB_buffer,
+                        1/args.gamma,
+                        negative_number_handling=args.gamma_negative_clip
+                        )
+                    RGB_uncorrected = colour.gamma_function(
+                        RGB_uncorrected,
+                        1/args.gamma,
+                        negative_number_handling=args.gamma_negative_clip
+                    )
+            elif args.inverse_chromatic_transform:
+                if not args.electro_optic_disable:
+                    RGB_buffer = t_colorspace.cctf_decoding(RGB_buffer)
+                if not args.opto_electronic_disable:
+                    RGB_buffer = s_colorspace.cctf_encoding(RGB_buffer)
             else:
-                if not colorspace_equality(s_colorspace, t_colorspace):
-                    # perform transform only when colorspaces actually differ
-                    if (args.debug): print("colorspace transform!")
-                    if (args.inverse_chromatic_transform):
-                        if (args.debug): print("inverse transform!")
-                        RGB_buffer = colour.RGB_to_RGB(
-                            RGB_buffer,
-                            t_colorspace,
-                            s_colorspace,
-                            chromatic_adaptation_transform=args.chromatic_adaptation_transform,
-                            apply_cctf_decoding=(not args.electro_optic_disable),
-                            apply_cctf_encoding=(not args.opto_electronic_disable))
-                        if (args.debug): print(colour.matrix_RGB_to_RGB(t_colorspace, s_colorspace))
-                    else:
-                        RGB_buffer = colour.RGB_to_RGB(
-                            RGB_buffer,
-                            s_colorspace,
-                            t_colorspace,
-                            chromatic_adaptation_transform=args.chromatic_adaptation_transform,
-                            apply_cctf_decoding=(not args.electro_optic_disable),
-                            apply_cctf_encoding=(not args.opto_electronic_disable))
-                        if (args.debug): print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
-
-        # if permitted, clip
-        # this may produce values beyond 0-1
-        normalize_RGB(RGB_buffer, args)
-        normalize_RGB(RGB_uncorrected, args)
+                if not args.electro_optic_disable:
+                    RGB_buffer = s_colorspace.cctf_decoding(RGB_buffer)
+                if not args.opto_electronic_disable:
+                    RGB_buffer = t_colorspace.cctf_encoding(RGB_buffer)
 
         output_format = {
             ".pal uint8": output_binary_uint8,

@@ -37,7 +37,7 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}]
                 [-c {none,clip,darken,desaturate}] [-bri BRIGHTNESS]
                 [-con CONTRAST] [-hue HUE] [-sat SATURATION]
-                [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN] [-gam GAMMA]
+                [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                 [--delay-line-filter] [-agc {None,sync,burst}]
                 [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
                 [-bse] [-spg] [-phs PHASE_SKEW] [-phd PHASE_DISTORTION]
@@ -47,6 +47,7 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
                 [-oetf OPTO_ELECTRONIC] [-eotf ELECTRO_OPTIC]
                 [--opto-electronic-disable] [--electro-optic-disable] [-cld]
+                [-gam GAMMA] [-gnc {Indeterminate,Mirror,Preserve,Clamp}]
                 [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                 [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                 [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
@@ -89,7 +90,10 @@ options:
                         PPU chip used for generating colors. default = 2C02
   -c {none,clip,darken,desaturate}, --clip {none,clip,darken,desaturate}
                         clips out-of-gamut RGB colors. disabling this may
-                        cause undefined behavior in non-signed formats.
+                        cause undefined behavior in non-signed formats. This
+                        also causes some colors to be indeterminate (NAN) if
+                        applying a CCTF or gamma transfer function. Default =
+                        "clip"
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         luma brightness delta in IRE units, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -104,10 +108,6 @@ options:
   -gai GAIN, --gain GAIN
                         gain adjustment to signal before decoding, in IRE
                         units, default = 0.0
-  -gam GAMMA, --gamma GAMMA
-                        if defined, will apply a simple OETF gamma transfer
-                        function instead, where the EOTF function is assumed
-                        to be gamma 2.2.
   --delay-line-filter   use 1D delay line comb filter decoding instead of
                         single-line decoding
   -agc {None,sync,burst}, --auto-gain-control {None,sync,burst}
@@ -163,6 +163,13 @@ options:
                         disable converting linear signal to linear light
   -cld, --colorimetry-disable
                         disable all colorimetry functions
+  -gam GAMMA, --gamma GAMMA
+                        if defined, this will apply a simple OETF gamma
+                        transfer function instead, where the EOTF function is
+                        assumed to be gamma 2.2.
+  -gnc {Indeterminate,Mirror,Preserve,Clamp}, --gamma-negative-clip {Indeterminate,Mirror,Preserve,Clamp}
+                        Negative value handling for gamma transfer, if
+                        defined. default = Preserve
   -rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R, --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
                         set custom reference color primary R, in CIE xy
                         chromaticity coordinates
@@ -188,7 +195,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.25.0
+version 0.26.0
 ```
 
 ## License
