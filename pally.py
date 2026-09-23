@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.28.0"
+VERSION = "0.28.1"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -374,12 +374,6 @@ def parse_argv(argv):
 
 
 # matrix function to convert YUV to YIQ and vice-versa
-IQ_tilt = np.radians(33)
-YUV_YIQ = np.array([
-    [1, 0, 0],
-    [0, np.cos(IQ_tilt), np.sin(IQ_tilt)],
-    [0, -np.sin(IQ_tilt), np.cos(IQ_tilt)]
-], np.float64)
 
 # B-Y and R-Y reduction factors
 # S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
@@ -399,6 +393,7 @@ RGB_to_YUV = np.array([
     RGB_to_YBYRY[2]*RY_rf,
 ], np.float64)
 
+
 YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
 
 # derived from https://forums.nesdev.org/viewtopic.php?p=172817#p172817
@@ -411,6 +406,8 @@ YIQ_to_RGB_bisqwit = np.array([
 
 RGB_to_YIQ_bisqwit = np.linalg.inv(YIQ_to_RGB_bisqwit)
 
+IQ_tilt = np.radians(33)
+
 RGB_to_YUV_bisqwit = np.array([
     RGB_to_YIQ_bisqwit[0,:],
     ((RGB_to_YIQ_bisqwit[2,:]*np.sin(IQ_tilt)) - (RGB_to_YIQ_bisqwit[1,:]*np.cos(IQ_tilt))),
@@ -422,20 +419,22 @@ YUV_to_RGB_bisqwit = np.linalg.inv(RGB_to_YUV_bisqwit)
 # thanks, NewRisingSun!
 # Sony CXA2025AS axis offsets from the datasheet
 
+YBYRY_to_RGB = np.linalg.inv(RGB_to_YBYRY)
+
 CXA_JP_RY_angle = np.radians(95)
-CXA_JP_RY_gain = 0.78
+CXA_JP_RY_gain = 0.78/RY_rf
 CXA_JP_GY_angle = np.radians(240)
 CXA_JP_GY_gain = 0.30
 
 CXA_US_RY_angle = np.radians(112)
-CXA_US_RY_gain = 0.83
+CXA_US_RY_gain = 0.83/RY_rf
 CXA_US_GY_angle = np.radians(252)
 CXA_US_GY_gain = 0.30
 
 CXA_BY_angle = 0
-CXA_BY_gain = 1
+CXA_BY_gain = 1/BY_rf
 
-YUV_to_RGB_CXA_JP = np.array([
+YUV_CXA_JP_to_RGB = np.array([
     [
         1,
         np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain,
@@ -453,7 +452,7 @@ YUV_to_RGB_CXA_JP = np.array([
     ]
 ], np.float64)
 
-YUV_to_RGB_CXA_US = np.array([
+YUV_CXA_US_to_RGB = np.array([
     [
         1,
         np.cos(CXA_US_RY_angle)*CXA_JP_RY_gain,
@@ -1422,8 +1421,8 @@ def main(argv=None):
         # convert back to RGB, if permitted
         YUV_to_RGB_matrix = {
             "None": YUV_to_RGB,
-            "CXA2025AS_JP": YUV_to_RGB_CXA_JP,
-            "CXA2025AS_US": YUV_to_RGB_CXA_US,
+            "CXA2025AS_JP": YUV_CXA_JP_to_RGB,
+            "CXA2025AS_US": YUV_CXA_US_to_RGB,
             "bisqwit_NTSC_1953": YUV_to_RGB_bisqwit
         }
 
