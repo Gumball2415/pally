@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.27.0"
+VERSION = "0.28.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -208,6 +208,12 @@ def parse_argv(argv):
         ],
         default = "None")
     parser.add_argument(
+        "-vss",
+        "--v-subcarrier-shift",
+        type = np.float64,
+        help = "Additional V subcarrier offset phase shift, in degrees, default = 0.0",
+        default = 0)
+    parser.add_argument(
         "-bse",
         "--burst-saturation-enable",
         action = "store_true",
@@ -382,11 +388,18 @@ RY_rf = 0.877283
 
 # derived from the NTSC base matrix of luminance and color-difference
 # S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 4.
-RGB_to_YUV = np.array([
-    [ 0.299,        0.587,        0.114],
-    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
-    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+RGB_to_YBYRY = np.array([
+    [ 0.299,  0.587,  0.114],
+    [-0.299, -0.587,  0.886],
+    [ 0.701, -0.587, -0.114]
 ], np.float64)
+RGB_to_YUV = np.array([
+    RGB_to_YBYRY[0],
+    RGB_to_YBYRY[1]*BY_rf,
+    RGB_to_YBYRY[2]*RY_rf,
+], np.float64)
+
+YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
 
 # derived from https://forums.nesdev.org/viewtopic.php?p=172817#p172817
 # coefficients shifted up by 6 decimals
@@ -408,28 +421,54 @@ YUV_to_RGB_bisqwit = np.linalg.inv(RGB_to_YUV_bisqwit)
 
 # thanks, NewRisingSun!
 # Sony CXA2025AS axis offsets from the datasheet
-YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
 
-CXA_JP_RY_angle = 95
-CXA_JP_RY_gain = 0.78 / BY_rf
-CXA_JP_GY_angle = 240
-CXA_JP_GY_gain = 0.30 / BY_rf
+CXA_JP_RY_angle = np.radians(95)
+CXA_JP_RY_gain = 0.78
+CXA_JP_GY_angle = np.radians(240)
+CXA_JP_GY_gain = 0.30
 
-CXA_US_RY_angle = 112
-CXA_US_RY_gain = 0.83 / BY_rf
-CXA_US_GY_angle = 252
-CXA_US_GY_gain = 0.30 / BY_rf
+CXA_US_RY_angle = np.radians(112)
+CXA_US_RY_gain = 0.83
+CXA_US_GY_angle = np.radians(252)
+CXA_US_GY_gain = 0.30
+
+CXA_BY_angle = 0
+CXA_BY_gain = 1
 
 YUV_to_RGB_CXA_JP = np.array([
-    [YUV_to_RGB[0,0], np.sin(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,2]],
-    [YUV_to_RGB[1,0], np.sin(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,2]],
-    YUV_to_RGB[2,:]
+    [
+        1,
+        np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain,
+        np.sin(CXA_JP_RY_angle)*CXA_JP_RY_gain,
+    ],
+    [
+        1,
+        np.cos(CXA_JP_GY_angle)*CXA_JP_GY_gain,
+        np.sin(CXA_JP_GY_angle)*CXA_JP_GY_gain,
+    ],
+    [
+        1,
+        np.cos(CXA_BY_angle)*CXA_BY_gain,
+        np.sin(CXA_BY_angle)*CXA_BY_gain,
+    ]
 ], np.float64)
 
 YUV_to_RGB_CXA_US = np.array([
-    [YUV_to_RGB[0,0], np.sin(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,2]],
-    [YUV_to_RGB[1,0], np.sin(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,2]],
-    YUV_to_RGB[2,:]
+    [
+        1,
+        np.cos(CXA_US_RY_angle)*CXA_JP_RY_gain,
+        np.sin(CXA_US_RY_angle)*CXA_JP_RY_gain,
+    ],
+    [
+        1,
+        np.cos(CXA_US_GY_angle)*CXA_JP_GY_gain,
+        np.sin(CXA_US_GY_angle)*CXA_JP_GY_gain,
+    ],
+    [
+        1,
+        np.cos(CXA_BY_angle)*CXA_BY_gain,
+        np.sin(CXA_BY_angle)*CXA_BY_gain,
+    ]
 ], np.float64)
 
 composite_black = ppu.BLACK_LEVEL
@@ -626,7 +665,7 @@ def composite_QAM_plot(voltage_buffer,
     color_r =  np.sqrt(U_avg**2 + V_avg**2)
     ax1.axis([0, 2*np.pi, 0, 60])
     ax1.set_title("UV Phasor plot")
-    ax1.scatter(color_theta, color_r, label='Hue phase = {:< z.3f}'.format(np.rad2deg(color_theta)))
+    ax1.scatter(color_theta, color_r, label='Hue phase = {:< z.3f}'.format(np.degrees(color_theta)))
     ax1.vlines(color_theta, 0, color_r, label='Hue saturation = {:< z.3f}'.format(color_r))
     ax1.legend()
 
@@ -681,17 +720,17 @@ def normalize_RGB(RGB_buffer, args=None):
                     RGB_buffer[luma, chroma] /= darken_factor
                     RGB_buffer[luma, chroma] += YUV_calc[0]
 
-    # clip takes priority over normalize
-    if (args.clip != "none"):
+    # normalize takes priority over clip
+    if args.normalize is not None:
+        if (args.normalize != "scale clip negative"):
+            RGB_buffer -= np.amin(RGB_buffer)
+        RGB_buffer /= np.amax(RGB_buffer)
+    else:
         match args.clip:
             case "darken":
                 color_clip_darken(RGB_buffer)
             case "desaturate":
                 color_clip_desaturate(RGB_buffer)
-    elif (args.normalize is not None):
-        if (args.normalize != "scale clip negative"):
-            RGB_buffer -= np.amin(RGB_buffer)
-        RGB_buffer /= np.amax(RGB_buffer)
     if (args.clip != "none"):
         np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
@@ -913,6 +952,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
 
     U_phase = QAM_phase(cb_decode)
+    V_phase = U_phase - np.pi/2 + np.radians(args.v_subcarrier_shift)
 
     for emphasis in range(8):
         for luma in range(4):
@@ -953,7 +993,6 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     np.radians(antiemphasis_column_chroma - args.hue)
                 ) * args.saturation * saturation_correction
 
-                V_phase = U_phase - np.pi/2
                 V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase +
                     np.radians(antiemphasis_column_chroma - args.hue)
                 ) * args.saturation * saturation_correction
@@ -1024,7 +1063,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         if color_theta >= 2*np.pi: color_theta -= tau
                         color_r =  np.sqrt(U_avg**2 + V_avg**2)
                         delay = (color_theta/tau) * (1/PPU_Cb)
-                        print("Hue angle and saturation ${0:02X}: {1}, {2}".format((luma<<4 | hue), np.rad2deg(color_theta), color_r))
+                        print("Hue angle and saturation ${0:02X}: {1}, {2}".format((luma<<4 | hue), np.degrees(color_theta), color_r))
                         print("Delay ${0:02X}: {1}".format((luma<<4 | hue), delay))
                     if (args.waveforms):
                         composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
@@ -1374,6 +1413,12 @@ def main(argv=None):
         else:
             RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
 
+        if args.yuv_format:
+            raw_yuv = RGB_buffer
+            raw_yuv -= signal_black_point
+            raw_yuv /= (signal_white_point - signal_black_point)
+
+
         # convert back to RGB, if permitted
         YUV_to_RGB_matrix = {
             "None": YUV_to_RGB,
@@ -1381,11 +1426,6 @@ def main(argv=None):
             "CXA2025AS_US": YUV_to_RGB_CXA_US,
             "bisqwit_NTSC_1953": YUV_to_RGB_bisqwit
         }
-
-        if args.yuv_format:
-            raw_yuv = RGB_buffer
-            raw_yuv -= signal_black_point
-            raw_yuv /= (signal_white_point - signal_black_point)
 
         RGB_buffer = np.einsum('ij,klj->kli',
                                YUV_to_RGB_matrix[args.axis_shift],

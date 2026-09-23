@@ -8,8 +8,8 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                 [--delay-line-filter] [-agc {None,sync,burst}]
                 [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
-                [-bse] [-spg] [-phs PHASE_SKEW] [-phd PHASE_DISTORTION]
-                [-aps ANTIEMPHASIS_PHASE_SKEW]
+                [-vss V_SUBCARRIER_SHIFT] [-bse] [-spg] [-phs PHASE_SKEW]
+                [-phd PHASE_DISTORTION] [-aps ANTIEMPHASIS_PHASE_SKEW]
                 [-ela EMPHASIS_LUMA_ATTENUATION] [-rfc REFERENCE_COLORSPACE]
                 [-dsc DISPLAY_COLORSPACE]
                 [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
@@ -84,6 +84,9 @@ options:
   -axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}
                         axis adjustment for R-Y and G-Y like Sony CXA2025AS,
                         default = None
+  -vss V_SUBCARRIER_SHIFT, --v-subcarrier-shift V_SUBCARRIER_SHIFT
+                        Additional V subcarrier offset phase shift, in
+                        degrees, default = 0.0
   -bse, --burst-saturation-enable
                         enable using colorburst amplitude as saturation
                         reference
@@ -163,4 +166,4 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.27.0
+version 0.28.0
